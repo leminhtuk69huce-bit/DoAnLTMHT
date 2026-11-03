@@ -23,6 +23,10 @@ Chương trình Client - Server mô phỏng giao thức FTP phiên bản 5 cho p
 ├── .gitignore               # Loại bỏ các file rác, file nhị phân, cấu hình cá nhân
 ├── README.md                # Tài liệu tổng quan dự án
 ├── LICENSE                  # Giấy phép mã nguồn
+├── docs/                    # Tài liệu đặc tả và thiết kế hệ thống
+│   ├── bao-cao-thiet-ke-ftp-v5.md  # Báo cáo phân tích thiết kế đầy đủ (UseCase, Sequence, Class...)
+│   ├── de-tai-13-ftp-v5-dac-ta.md  # Đặc tả kỹ thuật chi tiết
+│   └── tong-hop-de-tai-13.md       # Hướng dẫn tổng hợp & prompts
 └── ftp_v5/
     ├── FTPServer.cpp        # Mã nguồn C++ Winsock Server
     ├── FTPClient.cpp        # Mã nguồn C++ Winsock Client
