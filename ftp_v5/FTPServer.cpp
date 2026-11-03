@@ -1,76 +1,67 @@
-/*
- * FTPServer.cpp - Chuong trinh Server FTP v5 (Bulk Download) - De tai 13
- * =========================================================================
- * Bien dich: CodeBlocks / MinGW:
- *   Them "-lws2_32 -static" vao Linker Options
- *
- * Luu y: Cong 21 can quyen Administrator tren Windows.
- *        Click phai vao file -> "Run as administrator"
- */
-
-#include <winsock2.h>    // Thu vien socket chinh (giong code mau cua thay)
-#include <windows.h>     // Thu vien Windows (de doc thu muc: FindFirstFile...)
-#include <iostream>
-#include <string>
+#include "FTPServer.h"
 #include <sstream>
 #include <fstream>
-#include <vector>
-#include <thread>        // Xu ly da luong (nhieu client cung luc)
+#include <thread>
 
 using namespace std;
-#pragma comment(lib, "ws2_32.lib")  // Lien ket thu vien Winsock (giong code thay)
-
+#pragma comment(lib, "ws2_32.lib")
 
 // ══════════════════════════════════════════
-// CAI DAT CHUNG
+// BIEN TOAN CUC CUA SERVER
 // ══════════════════════════════════════════
-
-#define CONG_FTP     21             // Cong FTP chuan (cung co the doi thanh 2121 neu bi chan)
-#define THU_MUC_GOC  "server_files" // Thu muc goc chua file tren server
-
-// Tai khoan hop le (hardcode don gian)
 const string TAI_KHOAN = "admin";
 const string MAT_KHAU  = "1234";
 
+SOCKET socketChinh = INVALID_SOCKET;
+bool   dangChay    = false;
+
 
 // ══════════════════════════════════════════
-// BIEN TOAN CUC
+// KHOI TAO & DON DEP WINSOCK
 // ══════════════════════════════════════════
 
-SOCKET  socketChinh = INVALID_SOCKET;  // Socket chinh dang lang nghe cong 21
-bool    dangChay    = false;           // Trang thai server (true = dang chay)
+bool khoiTaoWinsock() {
+    WSADATA wsa;
+    cout << "Initialising Winsock...Initialised.\n\n";
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        cout << "Failed. Error Code : " << WSAGetLastError() << "\n";
+        return false;
+    }
+    return true;
+}
+
+void donDepWinsock() {
+    WSACleanup();
+}
 
 
 // ══════════════════════════════════════════
 // HAM TIEN ICH: GUI / NHAN QUA SOCKET
 // ══════════════════════════════════════════
 
-// Gui mot dong phan hoi toi client.
-// FTP yeu cau moi phan hoi ket thuc bang \r\n
 void guiPhanHoi(SOCKET s, const string& thongBao) {
     string truyen = thongBao + "\r\n";
     send(s, truyen.c_str(), (int)truyen.size(), 0);
 }
 
-// Nhan mot dong lenh tu client (doc den khi gap ky tu xuong dong \n)
 string nhanLenh(SOCKET s) {
     string ket = "";
     char c;
     while (true) {
         int r = recv(s, &c, 1, 0);
-        if (r <= 0) break;       // Ket noi bi dut
-        if (c == '\n') break;    // Ket thuc dong (gap \n la xong mot lenh)
-        if (c != '\r') ket += c; // Bo \r, chi giu ki tu hop le
+        if (r <= 0) break;
+        if (c == '\n') break;
+        if (c != '\r') ket += c;
     }
     return ket;
 }
 
 
 // ══════════════════════════════════════════
-// HAM HIEN THI DIA CHI IP CUA SERVER
+// HIEN THI IP & HUONG DAN (HELP)
 // ══════════════════════════════════════════
 
-void hienThiIP() {
+void hienThiIPServer() {
     cout << "[SERVER] Dia chi IP de Client ket noi:\n";
     cout << "  - Cung may (Localhost) : 127.0.0.1\n";
 
@@ -91,11 +82,6 @@ void hienThiIP() {
     cout << "  => Cu phap ben Client : login <IP> admin 1234\n";
 }
 
-
-// ══════════════════════════════════════════
-// HAM HIEN THI HUONG DAN LENH (HELP)
-// ══════════════════════════════════════════
-
 void troGiupServer() {
     cout << "\n================= HUONG DAN LENH SERVER ================\n";
     cout << "  start : Khoi dong server va lang nghe tren cong " << CONG_FTP << "\n";
@@ -108,57 +94,48 @@ void troGiupServer() {
 
 
 // ══════════════════════════════════════════
-// HAM TAO DATA CONNECTION (Cong ngau nhien)
+// TAO DATA CONNECTION
 // ══════════════════════════════════════════
 
-// Tao mot socket tam tren cong ngau nhien de nhan Data Connection tu client.
-// Cach lam: bind cong 0 → he dieu hanh tu cap cong trong → lay cong do.
-// Tra ve: socket vua tao va so cong (qua bien "cong")
 SOCKET taoDataServer(int& cong) {
-    SOCKET ds = socket(AF_INET, SOCK_STREAM, 0);  // Tao socket TCP
+    SOCKET ds = socket(AF_INET, SOCK_STREAM, 0);
 
     sockaddr_in diaChi;
     diaChi.sin_family      = AF_INET;
     diaChi.sin_addr.s_addr = INADDR_ANY;
-    diaChi.sin_port        = htons(0);   // Cong 0 = he dieu hanh tu chon cong trong
+    diaChi.sin_port        = htons(0);   // Port 0: he dieu hanh tu cap cong trong
 
     bind(ds, (sockaddr*)&diaChi, sizeof(diaChi));
 
-    // Doc so cong vua duoc cap
     sockaddr_in diaChiBound;
     int len = sizeof(diaChiBound);
     getsockname(ds, (sockaddr*)&diaChiBound, &len);
-    cong = ntohs(diaChiBound.sin_port);  // Chuyen ve so nguyen de in ra cho client
+    cong = ntohs(diaChiBound.sin_port);
 
-    listen(ds, 1);  // Cho phep 1 ket noi dang cho
+    listen(ds, 1);
     return ds;
 }
 
 
 // ══════════════════════════════════════════
-// HAM LAY DANH SACH FILE TRONG THU MUC
+// DOC DANH SACH FILE
 // ══════════════════════════════════════════
 
-// Lay danh sach ten file (chi file, khong lay thu muc con).
-// Dung FindFirstFileA / FindNextFileA cua Windows API.
 vector<string> layDanhSachFile(const string& tenThuMuc) {
     vector<string> dsFile;
-
-    // Pattern tim kiem: "server_files\docs\*"
     string pattern = string(THU_MUC_GOC) + "\\" + tenThuMuc + "\\*";
 
     WIN32_FIND_DATAA timKiem;
     HANDLE hFind = FindFirstFileA(pattern.c_str(), &timKiem);
 
     if (hFind == INVALID_HANDLE_VALUE) {
-        return dsFile;  // Thu muc khong ton tai → tra ve danh sach rong
+        return dsFile;
     }
 
     do {
         bool laThuMucCon = (timKiem.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
         bool laDauCham   = (string(timKiem.cFileName) == "." || string(timKiem.cFileName) == "..");
 
-        // Chi lay file that su (bo qua "." ".." va thu muc con)
         if (!laThuMucCon && !laDauCham) {
             dsFile.push_back(timKiem.cFileName);
         }
@@ -170,13 +147,10 @@ vector<string> layDanhSachFile(const string& tenThuMuc) {
 
 
 // ══════════════════════════════════════════
-// XU LY XAC THUC (USER + PASS)
+// XU LY XAC THUC (USER & PASS)
 // ══════════════════════════════════════════
 
-// Nhan va kiem tra lenh USER + PASS tu client.
-// Tra ve true neu dang nhap dung, false neu sai.
 bool xacThuc(SOCKET ctrl) {
-    // --- Nhan lenh USER ---
     string lenh = nhanLenh(ctrl);
     cout << "[SERVER] Nhan: " << lenh << "\n";
 
@@ -184,20 +158,18 @@ bool xacThuc(SOCKET ctrl) {
         guiPhanHoi(ctrl, "500 Lenh khong hop le");
         return false;
     }
-    string tenND = lenh.substr(5);  // Lay phan sau "USER "
+    string tenND = lenh.substr(5);
     guiPhanHoi(ctrl, "331 Password required");
 
-    // --- Nhan lenh PASS ---
     lenh = nhanLenh(ctrl);
-    cout << "[SERVER] Nhan: PASS ****\n";  // An mat khau khi hien thi
+    cout << "[SERVER] Nhan: PASS ****\n";
 
     if (lenh.size() < 6 || lenh.substr(0, 5) != "PASS ") {
         guiPhanHoi(ctrl, "500 Lenh khong hop le");
         return false;
     }
-    string matKhauNhap = lenh.substr(5);  // Lay phan sau "PASS "
+    string matKhauNhap = lenh.substr(5);
 
-    // --- Kiem tra tai khoan ---
     if (tenND == TAI_KHOAN && matKhauNhap == MAT_KHAU) {
         guiPhanHoi(ctrl, "230 Login successful");
         cout << "[SERVER] Xac thuc thanh cong cho user '" << tenND << "'\n";
@@ -211,11 +183,10 @@ bool xacThuc(SOCKET ctrl) {
 
 
 // ══════════════════════════════════════════
-// XU LY LENH LIST (Gui danh sach file)
+// XU LY LENH LIST
 // ══════════════════════════════════════════
 
 void xuLyList(SOCKET ctrl, const string& tenThuMuc) {
-    // Kiem tra thu muc co ton tai khong
     string duongDanThuMuc = string(THU_MUC_GOC) + "\\" + tenThuMuc;
     DWORD thuocTinh = GetFileAttributesA(duongDanThuMuc.c_str());
     bool tonTai = (thuocTinh != INVALID_FILE_ATTRIBUTES) &&
@@ -227,28 +198,22 @@ void xuLyList(SOCKET ctrl, const string& tenThuMuc) {
         return;
     }
 
-    // Lay danh sach file trong thu muc
     vector<string> dsFile = layDanhSachFile(tenThuMuc);
     cout << "[SERVER] Thu muc '" << tenThuMuc << "' co " << dsFile.size() << " file\n";
 
-    // --- Tao Data Connection ---
     int cong;
     SOCKET ds = taoDataServer(cong);
-    // Bao cho client biet cong nao se dung de nhan data
     guiPhanHoi(ctrl, "150 " + to_string(cong) + " Opening data connection");
 
-    // Cho client ket noi vao cong data
     sockaddr_in diaChiClient;
     int lenClient = sizeof(diaChiClient);
     SOCKET dataConn = accept(ds, (sockaddr*)&diaChiClient, &lenClient);
 
-    // --- Gui danh sach file: moi file mot dong, ket thuc bang \r\n ---
     for (const string& tenFile : dsFile) {
         string dong = tenFile + "\r\n";
         send(dataConn, dong.c_str(), (int)dong.size(), 0);
     }
 
-    // Dong Data Connection (bao hieu da gui xong)
     closesocket(dataConn);
     closesocket(ds);
 
@@ -258,11 +223,10 @@ void xuLyList(SOCKET ctrl, const string& tenThuMuc) {
 
 
 // ══════════════════════════════════════════
-// XU LY LENH RETR (Gui noi dung file)
+// XU LY LENH RETR
 // ══════════════════════════════════════════
 
 void xuLyRetr(SOCKET ctrl, const string& duongDanFile) {
-    // Chuan hoa duong dan: thay '/' bang '\' cho Windows
     string duongDanChuan = duongDanFile;
     for (char& c : duongDanChuan) {
         if (c == '/') c = '\\';
@@ -270,7 +234,6 @@ void xuLyRetr(SOCKET ctrl, const string& duongDanFile) {
 
     string duongDanDayDu = string(THU_MUC_GOC) + "\\" + duongDanChuan;
 
-    // Mo file de doc (che do nhi phan - de tai duoc ca file anh, zip...)
     ifstream file(duongDanDayDu, ios::binary);
     if (!file.is_open()) {
         guiPhanHoi(ctrl, "550 File not found");
@@ -280,17 +243,14 @@ void xuLyRetr(SOCKET ctrl, const string& duongDanFile) {
 
     cout << "[SERVER] Dang gui file: " << duongDanFile << "\n";
 
-    // --- Tao Data Connection ---
     int cong;
     SOCKET ds = taoDataServer(cong);
     guiPhanHoi(ctrl, "150 " + to_string(cong) + " Opening data connection");
 
-    // Cho client ket noi vao cong data
     sockaddr_in diaChiClient;
     int lenClient = sizeof(diaChiClient);
     SOCKET dataConn = accept(ds, (sockaddr*)&diaChiClient, &lenClient);
 
-    // --- Doc va gui noi dung file theo tung khoi 4KB ---
     char buffer[4096];
     while (file.read(buffer, sizeof(buffer)) || file.gcount() > 0) {
         int soByte = (int)file.gcount();
@@ -298,7 +258,6 @@ void xuLyRetr(SOCKET ctrl, const string& duongDanFile) {
     }
     file.close();
 
-    // Dong Data Connection (bao hieu da gui xong file)
     closesocket(dataConn);
     closesocket(ds);
 
@@ -308,37 +267,31 @@ void xuLyRetr(SOCKET ctrl, const string& duongDanFile) {
 
 
 // ══════════════════════════════════════════
-// XU LY TUNG CLIENT (chay trong thread rieng)
+// XU LY CLIENT (THREAD)
 // ══════════════════════════════════════════
 
 void xuLyClient(SOCKET ctrl) {
-    // Gui thong bao chao mung ngay khi client ket noi vao
     guiPhanHoi(ctrl, "220 FTP Server Ready");
 
-    // --- Buoc 1: Xac thuc ---
     if (!xacThuc(ctrl)) {
         closesocket(ctrl);
-        return;  // Sai mat khau thi dong ket noi
+        return;
     }
 
-    // --- Buoc 2: Vong lap nhan lenh ---
     while (true) {
         string lenh = nhanLenh(ctrl);
-        if (lenh.empty()) break;  // Ket noi bi dut
+        if (lenh.empty()) break;
 
         cout << "[SERVER] Nhan lenh: " << lenh << "\n";
 
-        // Kiem tra lenh LIST <ten_thu_muc>
         if (lenh.size() > 5 && lenh.substr(0, 5) == "LIST ") {
             string tenThuMuc = lenh.substr(5);
             xuLyList(ctrl, tenThuMuc);
 
-        // Kiem tra lenh RETR <thu_muc>/<ten_file>
         } else if (lenh.size() > 5 && lenh.substr(0, 5) == "RETR ") {
             string duongDan = lenh.substr(5);
             xuLyRetr(ctrl, duongDan);
 
-        // Kiem tra lenh QUIT
         } else if (lenh == "QUIT") {
             guiPhanHoi(ctrl, "221 Goodbye");
             cout << "[SERVER] Client da ngat ket noi\n";
@@ -354,7 +307,7 @@ void xuLyClient(SOCKET ctrl) {
 
 
 // ══════════════════════════════════════════
-// VONG LAP CHAP NHAN KET NOI (chay trong thread)
+// VONG LAP ACCEPT
 // ══════════════════════════════════════════
 
 void vongLapAccept() {
@@ -362,31 +315,27 @@ void vongLapAccept() {
         sockaddr_in diaChiClient;
         int lenClient = sizeof(diaChiClient);
 
-        // Cho client ket noi vao...
         SOCKET clientSocket = accept(socketChinh, (sockaddr*)&diaChiClient, &lenClient);
-
-        if (clientSocket == INVALID_SOCKET) break;  // socketChinh bi dong → thoat
+        if (clientSocket == INVALID_SOCKET) break;
 
         cout << "[SERVER] Client " << inet_ntoa(diaChiClient.sin_addr) << " da ket noi\n";
 
-        // Moi client duoc xu ly trong mot thread rieng
         thread t(xuLyClient, clientSocket);
-        t.detach();  // Cho thread chay doc lap, khong can doi no ket thuc
+        t.detach();
     }
 }
 
 
 // ══════════════════════════════════════════
-// LENH START - Khoi dong server
+// KHOI DONG & TAT SERVER
 // ══════════════════════════════════════════
 
-void khoidong() {
+void khoiDongServer() {
     if (dangChay) {
         cout << "[SERVER] Server da dang chay roi!\n";
         return;
     }
 
-    // Tao socket TCP (giong code mau cua thay)
     socketChinh = socket(AF_INET, SOCK_STREAM, 0);
     if (socketChinh == INVALID_SOCKET) {
         cout << "[SERVER] Loi tao socket: " << WSAGetLastError() << "\n";
@@ -394,11 +343,9 @@ void khoidong() {
     }
     cout << "Socket created.\n";
 
-    // Tranh loi "Address already in use" khi restart nhanh
     int opt = 1;
     setsockopt(socketChinh, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt));
 
-    // Gan dia chi va cong 21 (giong code mau cua thay)
     sockaddr_in serverAddr;
     serverAddr.sin_family      = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
@@ -406,32 +353,23 @@ void khoidong() {
 
     if (bind(socketChinh, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         cout << "[SERVER] Loi bind cong " << CONG_FTP << ": " << WSAGetLastError() << "\n";
-        cout << "         Giai phap: Chay CodeBlocks/FTPServer bang 'Run as administrator'\n";
-        cout << "         Hoac doi CONG_FTP thanh 2121 (khong can quyen Admin)\n";
+        cout << "         Giai phap: Chay ung dung bang 'Run as administrator'\n";
         closesocket(socketChinh);
         socketChinh = INVALID_SOCKET;
         return;
     }
     cout << "Bind done.\n";
 
-    // Lang nghe ket noi den (toi da 5 ket noi cho hang doi)
     listen(socketChinh, 5);
 
     dangChay = true;
     cout << "[SERVER] Dang lang nghe tren cong " << CONG_FTP << "...\n";
 
-    // Tu dong in dia chi IP de tien nhap vao Client
-    hienThiIP();
+    hienThiIPServer();
 
-    // Chay vong lap accept trong thread rieng (khong block chuong trinh chinh)
     thread t(vongLapAccept);
     t.detach();
 }
-
-
-// ══════════════════════════════════════════
-// LENH STOP - Tat server
-// ══════════════════════════════════════════
 
 void tatServer() {
     if (!dangChay) {
@@ -439,60 +377,7 @@ void tatServer() {
         return;
     }
     dangChay = false;
-    closesocket(socketChinh);   // Dong socket → vongLapAccept() se tu thoat
+    closesocket(socketChinh);
     socketChinh = INVALID_SOCKET;
     cout << "[SERVER] Da tat server.\n";
-}
-
-
-// ══════════════════════════════════════════
-// CHUONG TRINH CHINH
-// ══════════════════════════════════════════
-
-int main() {
-    // --- Khoi tao Winsock (copy y chang code mau cua thay) ---
-    WSADATA wsa;
-    cout << "Initialising Winsock...Initialised.\n\n";
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-        cout << "Failed. Error Code : " << WSAGetLastError() << "\n";
-        return 1;
-    }
-
-    cout << "========================================\n";
-    cout << "      FTP SERVER - DE TAI 13\n";
-    cout << "========================================\n";
-    cout << "(Go 'help' de xem danh sach lenh)\n";
-    cout << "----------------------------------------\n";
-
-    string lenh;
-    while (true) {
-        cout << "server> ";
-        getline(cin, lenh);
-
-        if (lenh.empty()) continue;
-
-        if (lenh == "start") {
-            khoidong();
-
-        } else if (lenh == "stop") {
-            tatServer();
-
-        } else if (lenh == "ip") {
-            hienThiIP();
-
-        } else if (lenh == "help") {
-            troGiupServer();
-
-        } else if (lenh == "exit") {
-            if (dangChay) tatServer();
-            cout << "Chuong trinh ket thuc.\n";
-            break;
-
-        } else {
-            cout << "Lenh khong hop le. Go 'help' de xem huong dan.\n";
-        }
-    }
-
-    WSACleanup();  // Don dep Winsock truoc khi thoat (giong code mau thay)
-    return 0;
 }

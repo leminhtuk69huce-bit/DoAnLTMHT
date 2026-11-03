@@ -1,16 +1,18 @@
-# Hướng Dẫn Cài Đặt & Chạy – FTP v5 (De tai 13)
+# Hướng Dẫn Cài Đặt & Chạy – FTP v5 (Đề tài 13)
 
-## Cấu Trúc File
+## Cấu Trúc Mã Nguồn (Chuẩn C++ .cpp & .h)
 ```
 ftp_v5/
-├── FTPServer.cpp        ← Code server (C++ Winsock)
-├── FTPClient.cpp        ← Code client (C++ Winsock)
-├── server_files/
-│   └── docs/
-│       ├── file1.txt
-│       ├── file2.txt
-│       └── file3.txt
-└── client_downloads/    ← File tải về lưu ở đây
+├── FTPServer.h          ← Khai báo thư viện & hàm Server
+├── FTPServer.cpp        ← Triển khai logic Server (Winsock, đa luồng, FTP)
+├── ServerMain.cpp       ← Hàm main() điều khiển Server
+│
+├── FTPClient.h          ← Khai báo thư viện & hàm Client
+├── FTPClient.cpp        ← Triển khai logic Client (Winsock, tải file, mget)
+├── ClientMain.cpp       ← Hàm main() điều khiển Client
+│
+├── server_files/        ← Thư mục dữ liệu Server (chứa docs/file1.txt,...)
+└── client_downloads/    ← Thư mục lưu kết quả tải về
 ```
 
 ---
@@ -19,103 +21,71 @@ ftp_v5/
 
 ### Tạo project SERVER:
 1. File → New → Project → **Console Application** → C++
-2. Tên project: `FTPServer`
-3. Lưu vào thư mục `ftp_v5/`
-4. Xóa file `main.cpp` mặc định
-5. Kéo file `FTPServer.cpp` vào project
+2. Tên project: `FTPServer`, lưu vào thư mục `ftp_v5/`
+3. Xóa file `main.cpp` mặc định mà Code::Blocks tự tạo
+4. Thêm 3 file vào project:
+   - `FTPServer.h`
+   - `FTPServer.cpp`
+   - `ServerMain.cpp`
 
 ### Tạo project CLIENT:
-1. Làm tương tự, tên: `FTPClient`
-2. Kéo file `FTPClient.cpp` vào project
+1. File → New → Project → **Console Application** → C++
+2. Tên project: `FTPClient`, lưu vào thư mục `ftp_v5/`
+3. Xóa file `main.cpp` mặc định
+4. Thêm 3 file vào project:
+   - `FTPClient.h`
+   - `FTPClient.cpp`
+   - `ClientMain.cpp`
 
 ---
 
 ## Bước 2: Thêm Linker Options (BẮT BUỘC)
 
-Cả 2 project đều phải làm bước này:
+Cả 2 project đều phải cấu hình bước này:
 
-1. **Project** → **Build Options**
+1. Vào menu: **Project** → **Build Options**
 2. Chọn tab **Linker settings**
-3. Phần **Other linker options**, thêm:
+3. Trong ô **Other linker options**, điền:
    ```text
    -lws2_32 -static
    ```
 4. Nhấn **OK**
 
 > **Giải thích tham số:**
-> - `-lws2_32`: Liên kết thư viện Winsock của Windows (tránh lỗi `undefined reference to WSAStartup`).
-> - `-static`: Đóng gói thư viện C++ trực tiếp vào file `.exe` (tránh lỗi `Entry Point Not Found` do máy tính nạp nhầm file DLL MinGW phiên bản cũ trong hệ điều hành).
+> - `-lws2_32`: Liên kết thư viện mạng Windows Winsock2 (tránh lỗi `undefined reference to WSAStartup`).
+> - `-static`: Đóng gói thư viện C++ trực tiếp vào file `.exe` (giúp file chạy được trên mọi máy tính mà không lo thiếu file DLL).
 
 ---
 
-## Bước 3: Chạy Chương Trình
+## Bước 3: Chạy & Trải Nghiệm Chương Trình
 
-### Chạy Server (cần quyền Admin vì cổng 21):
-- Click phải vào file **`FTPServer.exe`** hoặc **CodeBlocks.exe** → **Run as administrator**
-- Gõ lệnh: `start`
+### 1. Khởi động Server:
+- Chạy với quyền **Run as administrator** (do cổng 21 là cổng hệ thống).
+- Nhập: `start`
+- Server sẽ tự động dò và in địa chỉ IP của máy ra màn hình:
+  ```text
+  server> start
+  Socket created.
+  Bind done.
+  [SERVER] Dang lang nghe tren cong 21...
+  [SERVER] Dia chi IP de Client ket noi:
+    - Cung may (Localhost) : 127.0.0.1
+    - Mang LAN (May khac)  : 192.168.1.168
+    => Cu phap ben Client : login <IP> admin 1234
+  ```
 
-> **Nếu bị lỗi bind cổng 21:** Đổi `#define CONG_FTP 21` thành `#define CONG_FTP 2121`
-> trong cả 2 file (FTPServer.cpp và FTPClient.cpp).
-
-### Chạy Client (Mở terminal hoặc double-click FTPClient.exe):
-- Gõ: `login 127.0.0.1 admin 1234`
-- Gõ: `mget docs`
-- Gõ: `quit`
-
----
-
-## Ví Dụ Chạy Thực Tế
-
-### Terminal 1 - Server:
-```
-Initialising Winsock...Initialised.
-
-========================================
-      FTP SERVER - DE TAI 13
-========================================
-Lenh: start | stop | exit
-----------------------------------------
-server> start
-Socket created.
-Bind done.
-[SERVER] Dang lang nghe tren cong 21...
-server> [SERVER] Client 127.0.0.1 da ket noi
-[SERVER] Nhan: USER admin
-[SERVER] Nhan: PASS ****
-[SERVER] Xac thuc thanh cong cho user 'admin'
-[SERVER] Nhan lenh: LIST docs
-[SERVER] Thu muc 'docs' co 3 file
-[SERVER] Da gui xong danh sach file
-[SERVER] Nhan lenh: RETR docs/file1.txt
-[SERVER] Dang gui file: docs/file1.txt
-[SERVER] Da gui xong file: docs/file1.txt
-...
-```
-
-### Terminal 2 - Client:
-```
-Initialising Winsock...Initialised.
-
-========================================
-      FTP CLIENT - DE TAI 13
-========================================
-client> login 127.0.0.1 admin 1234
-Socket created.
-Connected.
-[CLIENT] 220 FTP Server Ready
-[CLIENT] 331 Password required
-[CLIENT] 230 Login successful
-[CLIENT] Dang nhap thanh cong!
-
-client> mget docs
-[CLIENT] Dang lay danh sach file trong thu muc 'docs'...
-[CLIENT] Tim thay 3 file trong thu muc 'docs'
-[CLIENT] Da tai 1/3 file: file1.txt
-[CLIENT] Da tai 2/3 file: file2.txt
-[CLIENT] Da tai 3/3 file: file3.txt
-[CLIENT] Hoan thanh! Da tai 3/3 file ve thu muc 'client_downloads'
-
-client> quit
-[CLIENT] 221 Goodbye
-[CLIENT] Da ngat ket noi.
-```
+### 2. Khởi động Client:
+- Mở cửa sổ Client:
+- Gõ đăng nhập:
+  ```text
+  client> login 127.0.0.1 admin 1234
+  ```
+- Gõ tải toàn bộ thư mục:
+  ```text
+  client> mget docs
+  ```
+  *(Tiến trình tải từng file sẽ hiển thị và lưu vào `client_downloads/`).*
+- Thoát:
+  ```text
+  client> quit
+  ```
