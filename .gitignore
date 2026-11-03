@@ -1,0 +1,45 @@
+# ==========================================
+# GITIGNORE - ĐỒ ÁN LẬP TRÌNH HỆ THỐNG MẠNG
+# ==========================================
+
+# 1. File thực thi và mã máy biên dịch (Binary & Object files)
+*.exe
+*.o
+*.obj
+*.dll
+*.so
+*.dylib
+*.bin
+*.out
+
+# 2. Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# 3. Cấu hình máy cá nhân và IDE (Code::Blocks, Visual Studio, VS Code, CLion...)
+.vscode/
+.vs/
+.idea/
+*.user
+*.user.*
+*.suo
+*.sln.docstates
+*.cbp.depend
+*.cbp.layout
+*.depend
+*.layout
+
+# 4. Tệp tin tạm thời và rác hệ thống (OS / Temp files)
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
+*.tmp
+*.temp
+*.log
+*.bak
+
+# 5. Dữ liệu tải về của Client (chỉ giữ thư mục, không đẩy file tải về lên Git)
+ftp_v5/client_downloads/*
+!ftp_v5/client_downloads/.gitkeep
