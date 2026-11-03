@@ -36,25 +36,28 @@ Cả 2 project đều phải làm bước này:
 
 1. **Project** → **Build Options**
 2. Chọn tab **Linker settings**
-3. Phần **Other linker options**, thêm: `-lws2_32`
+3. Phần **Other linker options**, thêm:
+   ```text
+   -lws2_32 -static
+   ```
 4. Nhấn **OK**
 
-> Nếu không làm bước này sẽ bị lỗi: `undefined reference to WSAStartup`
+> **Giải thích tham số:**
+> - `-lws2_32`: Liên kết thư viện Winsock của Windows (tránh lỗi `undefined reference to WSAStartup`).
+> - `-static`: Đóng gói thư viện C++ trực tiếp vào file `.exe` (tránh lỗi `Entry Point Not Found` do máy tính nạp nhầm file DLL MinGW phiên bản cũ trong hệ điều hành).
 
 ---
 
 ## Bước 3: Chạy Chương Trình
 
 ### Chạy Server (cần quyền Admin vì cổng 21):
-- Click phải vào **CodeBlocks.exe** → **Run as administrator**
-- Build và chạy `FTPServer`
-- Gõ `start`
+- Click phải vào file **`FTPServer.exe`** hoặc **CodeBlocks.exe** → **Run as administrator**
+- Gõ lệnh: `start`
 
 > **Nếu bị lỗi bind cổng 21:** Đổi `#define CONG_FTP 21` thành `#define CONG_FTP 2121`
-> trong cả 2 file (FTPServer.cpp và FTPClient.cpp)
+> trong cả 2 file (FTPServer.cpp và FTPClient.cpp).
 
-### Chạy Client (Terminal khác):
-- Build và chạy `FTPClient`
+### Chạy Client (Mở terminal hoặc double-click FTPClient.exe):
 - Gõ: `login 127.0.0.1 admin 1234`
 - Gõ: `mget docs`
 - Gõ: `quit`
@@ -116,4 +119,3 @@ client> quit
 [CLIENT] 221 Goodbye
 [CLIENT] Da ngat ket noi.
 ```
-
