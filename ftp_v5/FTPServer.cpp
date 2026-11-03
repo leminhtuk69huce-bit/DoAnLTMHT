@@ -1,11 +1,11 @@
 /*
  * FTPServer.cpp - Chuong trinh Server FTP v5 (Bulk Download) - De tai 13
  * =========================================================================
- * Bien dich: CodeBlocks, them "-lws2_32" vao Linker Options
- * Luu y: Cong 21 can quyen Administrator tren Windows.
- *        Click phai vao CodeBlocks -> "Run as administrator"
+ * Bien dich: CodeBlocks / MinGW:
+ *   Them "-lws2_32 -static" vao Linker Options
  *
- * Lenh dieu khien: start | stop | exit
+ * Luu y: Cong 21 can quyen Administrator tren Windows.
+ *        Click phai vao file -> "Run as administrator"
  */
 
 #include <winsock2.h>    // Thu vien socket chinh (giong code mau cua thay)
@@ -63,6 +63,47 @@ string nhanLenh(SOCKET s) {
         if (c != '\r') ket += c; // Bo \r, chi giu ki tu hop le
     }
     return ket;
+}
+
+
+// ══════════════════════════════════════════
+// HAM HIEN THI DIA CHI IP CUA SERVER
+// ══════════════════════════════════════════
+
+void hienThiIP() {
+    cout << "[SERVER] Dia chi IP de Client ket noi:\n";
+    cout << "  - Cung may (Localhost) : 127.0.0.1\n";
+
+    char tenMay[256];
+    if (gethostname(tenMay, sizeof(tenMay)) == 0) {
+        struct hostent* he = gethostbyname(tenMay);
+        if (he != NULL) {
+            for (int i = 0; he->h_addr_list[i] != NULL; ++i) {
+                struct in_addr addr;
+                memcpy(&addr, he->h_addr_list[i], sizeof(struct in_addr));
+                string ipStr = inet_ntoa(addr);
+                if (ipStr != "127.0.0.1") {
+                    cout << "  - Mang LAN (May khac)  : " << ipStr << "\n";
+                }
+            }
+        }
+    }
+    cout << "  => Cu phap ben Client : login <IP> admin 1234\n";
+}
+
+
+// ══════════════════════════════════════════
+// HAM HIEN THI HUONG DAN LENH (HELP)
+// ══════════════════════════════════════════
+
+void troGiupServer() {
+    cout << "\n================= HUONG DAN LENH SERVER ================\n";
+    cout << "  start : Khoi dong server va lang nghe tren cong " << CONG_FTP << "\n";
+    cout << "  stop  : Tam dung server\n";
+    cout << "  ip    : Hien thi lai dia chi IP cua server\n";
+    cout << "  help  : Hien thi danh sach huong dan lenh\n";
+    cout << "  exit  : Tat server va thoat chuong trinh\n";
+    cout << "========================================================\n\n";
 }
 
 
@@ -365,7 +406,7 @@ void khoidong() {
 
     if (bind(socketChinh, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         cout << "[SERVER] Loi bind cong " << CONG_FTP << ": " << WSAGetLastError() << "\n";
-        cout << "         Giai phap: Chay CodeBlocks bang 'Run as administrator'\n";
+        cout << "         Giai phap: Chay CodeBlocks/FTPServer bang 'Run as administrator'\n";
         cout << "         Hoac doi CONG_FTP thanh 2121 (khong can quyen Admin)\n";
         closesocket(socketChinh);
         socketChinh = INVALID_SOCKET;
@@ -378,6 +419,9 @@ void khoidong() {
 
     dangChay = true;
     cout << "[SERVER] Dang lang nghe tren cong " << CONG_FTP << "...\n";
+
+    // Tu dong in dia chi IP de tien nhap vao Client
+    hienThiIP();
 
     // Chay vong lap accept trong thread rieng (khong block chuong trinh chinh)
     thread t(vongLapAccept);
@@ -408,17 +452,16 @@ void tatServer() {
 int main() {
     // --- Khoi tao Winsock (copy y chang code mau cua thay) ---
     WSADATA wsa;
-    cout << "\nInitialising Winsock...";
+    cout << "Initialising Winsock...Initialised.\n\n";
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
         cout << "Failed. Error Code : " << WSAGetLastError() << "\n";
         return 1;
     }
-    cout << "Initialised.\n\n";
 
     cout << "========================================\n";
     cout << "      FTP SERVER - DE TAI 13\n";
     cout << "========================================\n";
-    cout << "Lenh: start | stop | exit\n";
+    cout << "(Go 'help' de xem danh sach lenh)\n";
     cout << "----------------------------------------\n";
 
     string lenh;
@@ -426,23 +469,30 @@ int main() {
         cout << "server> ";
         getline(cin, lenh);
 
+        if (lenh.empty()) continue;
+
         if (lenh == "start") {
             khoidong();
 
         } else if (lenh == "stop") {
             tatServer();
 
+        } else if (lenh == "ip") {
+            hienThiIP();
+
+        } else if (lenh == "help") {
+            troGiupServer();
+
         } else if (lenh == "exit") {
             if (dangChay) tatServer();
             cout << "Chuong trinh ket thuc.\n";
             break;
 
-        } else if (!lenh.empty()) {
-            cout << "Lenh khong duoc ho tro. Go: start | stop | exit\n";
+        } else {
+            cout << "Lenh khong hop le. Go 'help' de xem huong dan.\n";
         }
     }
 
     WSACleanup();  // Don dep Winsock truoc khi thoat (giong code mau thay)
     return 0;
 }
-
