@@ -36,3 +36,4 @@ std::vector<std::string> layDanhSachFile(const std::string& tenThuMuc);
 void taiMotFile(const std::string& tenThuMuc, const std::string& tenFile, int soThuTu, int tongSo);
 
 #endif // FTPCLIENT_H
+
