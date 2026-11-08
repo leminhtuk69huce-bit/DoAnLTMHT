@@ -24,7 +24,9 @@ void donDepWinsock();
 // Cac chuc nang chinh theo yeu cau de bai
 void troGiupClient();
 void dangNhap(const std::string& ip, const std::string& tenND, const std::string& matKhau);
+void xemDanhSachFile(const std::string& tenThuMuc);
 void taiToanBoThuMuc(const std::string& tenThuMuc);
+void taiFileDonLe(const std::string& duongDanFile);
 void ketThucPhien();
 
 // Cac ham ho tro giao thuc FTP

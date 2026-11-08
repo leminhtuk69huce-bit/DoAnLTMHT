@@ -9,13 +9,17 @@ Chương trình Client - Server viết bằng **C++ Winsock** mô phỏng giao t
 ### Phía Server:
 - `start`: Khởi động máy chủ, tự động hiển thị IP và lắng nghe kết nối tại cổng điều khiển `21`.
 - `stop`: Tạm dừng máy chủ.
+- `adduser <username> <password>`: Tạo thêm tài khoản mới cho người dùng.
+- `users`: Xem danh sách tất cả tài khoản trong hệ thống.
 - `ip`: Hiển thị lại các địa chỉ IP của server (Localhost & LAN).
 - `help`: Hiển thị danh sách hướng dẫn lệnh.
 - `exit`: Tắt máy chủ và thoát chương trình.
 
 ### Phía Client:
-- `login <IP server> <username> <password>`: Kết nối và xác thực theo giao thức FTP (Tài khoản mặc định: `admin` / `1234`).
-- `mget <tên thư mục server>`: Client gửi yêu cầu lấy danh sách tệp. Với mỗi tệp, client tự động tạo kết nối dữ liệu (Data Connection), tải tệp về thư mục `client_downloads/` và hiển thị tiến trình (VD: `Đã tải 1/3 file: file1.txt`).
+- `login <IP server> <username> <password>`: Kết nối và xác thực theo giao thức FTP (Tài khoản mặc định: `admin` / `1234` hoặc tài khoản do admin tạo).
+- `list <tên thư mục>` (hoặc `ls`): Xem danh sách các file có trong thư mục trên server trước khi tải.
+- `get <đường dẫn file>`: Tải một file đơn lẻ từ server về máy (VD: `get docs/file1.txt` hoặc `get docs\file1.txt`).
+- `mget <tên thư mục>`: Tải toàn bộ file trong thư mục về máy (hoặc tải 1 file cụ thể). Client tự động tạo kết nối dữ liệu (Data Connection), tải về thư mục `client_downloads/` và hiển thị tiến trình (VD: `Đã tải 1/3 file: file1.txt`).
 - `help`: Hiển thị danh sách hướng dẫn lệnh.
 - `quit`: Đóng phiên làm việc và ngắt kết nối.
 

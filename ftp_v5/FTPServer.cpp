@@ -2,6 +2,7 @@
 #include <sstream>
 #include <fstream>
 #include <thread>
+#include <map>
 
 using namespace std;
 #pragma comment(lib, "ws2_32.lib")
@@ -9,11 +10,34 @@ using namespace std;
 // ══════════════════════════════════════════
 // BIEN TOAN CUC CUA SERVER
 // ══════════════════════════════════════════
-const string TAI_KHOAN = "admin";
-const string MAT_KHAU  = "1234";
+// Danh sach tai khoan he thong: ten_dang_nhap -> mat_khau
+map<string, string> dsTaiKhoan = {
+    {"admin", "1234"},
+    {"user1", "1234"}
+};
 
 SOCKET socketChinh = INVALID_SOCKET;
 bool   dangChay    = false;
+
+
+// ══════════════════════════════════════════
+// QUAN LY TAI KHOAN NGUOI DUNG
+// ══════════════════════════════════════════
+
+bool themTaiKhoan(const string& user, const string& pass) {
+    if (user.empty() || pass.empty()) return false;
+    dsTaiKhoan[user] = pass;
+    return true;
+}
+
+void hienThiDanhSachTaiKhoan() {
+    cout << "\n=== DANH SACH TAI KHOAN HE THONG ===\n";
+    int stt = 1;
+    for (const auto& item : dsTaiKhoan) {
+        cout << "  " << stt++ << ". " << item.first << " (mat khau: " << item.second << ")\n";
+    }
+    cout << "====================================\n\n";
+}
 
 
 // ══════════════════════════════════════════
@@ -84,11 +108,13 @@ void hienThiIPServer() {
 
 void troGiupServer() {
     cout << "\n================= HUONG DAN LENH SERVER ================\n";
-    cout << "  start : Khoi dong server va lang nghe tren cong " << CONG_FTP << "\n";
-    cout << "  stop  : Tam dung server\n";
-    cout << "  ip    : Hien thi lai dia chi IP cua server\n";
-    cout << "  help  : Hien thi danh sach huong dan lenh\n";
-    cout << "  exit  : Tat server va thoat chuong trinh\n";
+    cout << "  start                 : Khoi dong server va lang nghe tren cong " << CONG_FTP << "\n";
+    cout << "  stop                  : Tam dung server\n";
+    cout << "  adduser <user> <pass> : Tao tai khoan moi cho nguoi dung\n";
+    cout << "  users                 : Xem danh sach tai khoan he thong\n";
+    cout << "  ip                    : Hien thi lai dia chi IP cua server\n";
+    cout << "  help                  : Hien thi danh sach huong dan lenh\n";
+    cout << "  exit                  : Tat server va thoat chuong trinh\n";
     cout << "========================================================\n\n";
 }
 
@@ -170,7 +196,9 @@ bool xacThuc(SOCKET ctrl) {
     }
     string matKhauNhap = lenh.substr(5);
 
-    if (tenND == TAI_KHOAN && matKhauNhap == MAT_KHAU) {
+    // Kiem tra trong danh sach tai khoan he thong
+    auto it = dsTaiKhoan.find(tenND);
+    if (it != dsTaiKhoan.end() && it->second == matKhauNhap) {
         guiPhanHoi(ctrl, "230 Login successful");
         cout << "[SERVER] Xac thuc thanh cong cho user '" << tenND << "'\n";
         return true;

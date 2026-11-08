@@ -13,8 +13,9 @@
 #define CONG_FTP     21              // Cong dieu khien FTP chuan
 #define THU_MUC_GOC  "server_files"  // Thu muc goc chua file cua server
 
-extern const std::string TAI_KHOAN;  // "admin"
-extern const std::string MAT_KHAU;   // "1234"
+// Quan ly tai khoan nguoi dung boi Admin Server
+bool themTaiKhoan(const std::string& user, const std::string& pass);
+void hienThiDanhSachTaiKhoan();
 
 // ══════════════════════════════════════════
 // KHAI BAO CAC HAM CUA SERVER

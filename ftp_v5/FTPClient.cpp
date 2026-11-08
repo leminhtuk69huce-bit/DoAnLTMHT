@@ -86,9 +86,13 @@ void troGiupClient() {
     cout << "  login <IP> <user> <pass> : Ket noi va dang nhap vao FTP Server\n";
     cout << "                             Vi du: login 127.0.0.1 admin 1234\n";
     cout << "                             (Hoac dung IP LAN, vd: login 192.168.1.168 admin 1234)\n\n";
+    cout << "  list <ten_thu_muc>       : Xem danh sach cac file co trong thu muc tren server\n";
+    cout << "                             (Co the dung lenh 'ls', vi du: list docs hoac ls docs)\n\n";
+    cout << "  get <duong_dan_file>     : Tai mot file don le tu server ve may\n";
+    cout << "                             Vi du: get docs/file1.txt (hoac get docs\\file1.txt)\n\n";
     cout << "  mget <ten_thu_muc>       : Tai toan bo file trong thu muc tu server\n";
     cout << "                             Vi du: mget docs\n";
-    cout << "                             (Luu y: chi dien ten thu muc con, khong dien o dia E:\\...)\n\n";
+    cout << "                             (Hoac tai 1 file cu the, vd: mget docs/file1.txt)\n\n";
     cout << "  help                     : Hien thi danh sach huong dan lenh nay\n\n";
     cout << "  quit                     : Ngat ket noi va thoat chuong trinh\n";
     cout << "========================================================\n\n";
@@ -232,12 +236,104 @@ void taiMotFile(const string& tenThuMuc, const string& tenFile, int soThuTu, int
 
 
 // ══════════════════════════════════════════
+// LENH LIST / LS: XEM DANH SACH FILE
+// ══════════════════════════════════════════
+
+void xemDanhSachFile(const string& tenThuMuc) {
+    if (socketDieuKhien == INVALID_SOCKET) {
+        cout << "[CLIENT] Chua dang nhap! Go 'help' hoac dung lenh: login <IP> admin 1234\n";
+        return;
+    }
+
+    cout << "[CLIENT] Dang xem danh sach file trong thu muc '" << tenThuMuc << "'...\n";
+    vector<string> dsFile = layDanhSachFile(tenThuMuc);
+
+    if (dsFile.empty()) {
+        cout << "[CLIENT] Thu muc '" << tenThuMuc << "' trong hoac khong ton tai tren server.\n";
+        return;
+    }
+
+    cout << "\n=== DANH SACH FILE TRONG THU MUC '" << tenThuMuc << "' ===\n";
+    for (size_t i = 0; i < dsFile.size(); ++i) {
+        cout << "  " << (i + 1) << ". " << dsFile[i] << "\n";
+    }
+    cout << "Tong cong: " << dsFile.size() << " file.\n";
+    cout << "================================================\n\n";
+}
+
+
+// ══════════════════════════════════════════
+// LENH GET: TAI MOT FILE DON LE
+// ══════════════════════════════════════════
+
+void taiFileDonLe(const string& duongDanFile) {
+    if (socketDieuKhien == INVALID_SOCKET) {
+        cout << "[CLIENT] Chua dang nhap! Go 'help' hoac dung lenh: login <IP> admin 1234\n";
+        return;
+    }
+
+    // Chuan hoa duong dan (chuyen dau '\' thanh '/')
+    string duongDanChuan = duongDanFile;
+    for (char& c : duongDanChuan) {
+        if (c == '\\') c = '/';
+    }
+
+    // Tach lay ten file o cuoi de luu vao thu muc client_downloads
+    size_t viTriCuoi = duongDanChuan.find_last_of('/');
+    string tenFileLuu = (viTriCuoi == string::npos) ? duongDanChuan : duongDanChuan.substr(viTriCuoi + 1);
+
+    cout << "[CLIENT] Dang yeu cau tai file: '" << duongDanChuan << "'...\n";
+
+    guiLenh(socketDieuKhien, "RETR " + duongDanChuan);
+    string phanHoi = nhanPhanHoi(socketDieuKhien);
+
+    if (phanHoi.size() >= 3 && phanHoi.substr(0, 3) == "550") {
+        cout << "[CLIENT] Loi: File '" << duongDanFile << "' khong ton tai tren server!\n";
+        return;
+    }
+
+    int soCong = laySoCong(phanHoi);
+    SOCKET dataSocket = ketNoiData(soCong);
+    if (dataSocket == INVALID_SOCKET) return;
+
+    string duongDanLuu = string(THU_MUC_TAI) + "\\" + tenFileLuu;
+    ofstream file(duongDanLuu, ios::binary);
+    if (!file.is_open()) {
+        cout << "[CLIENT] Loi: Khong the tao file '" << duongDanLuu << "'\n";
+        closesocket(dataSocket);
+        return;
+    }
+
+    char buffer[4096];
+    while (true) {
+        int soByteNhan = recv(dataSocket, buffer, sizeof(buffer), 0);
+        if (soByteNhan <= 0) break;
+        file.write(buffer, soByteNhan);
+    }
+    file.close();
+
+    closesocket(dataSocket);
+    nhanPhanHoi(socketDieuKhien);
+
+    cout << "[CLIENT] Da tai thanh cong file: '" << tenFileLuu << "' ve thu muc '" << THU_MUC_TAI << "'!\n";
+}
+
+
+// ══════════════════════════════════════════
 // LENH MGET TONG HOP
 // ══════════════════════════════════════════
 
 void taiToanBoThuMuc(const string& tenThuMuc) {
     if (socketDieuKhien == INVALID_SOCKET) {
         cout << "[CLIENT] Chua dang nhap! Go 'help' hoac dung lenh: login <IP> admin 1234\n";
+        return;
+    }
+
+    // Neu nguoi dung truyen vao 1 file cu the (co phan mo rong .txt, .pdf, v.v...)
+    size_t vitriCham = tenThuMuc.find_last_of('.');
+    size_t vitriXiet = tenThuMuc.find_last_of("/\\");
+    if (vitriCham != string::npos && (vitriXiet == string::npos || vitriCham > vitriXiet)) {
+        taiFileDonLe(tenThuMuc);
         return;
     }
 

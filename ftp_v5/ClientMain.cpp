@@ -41,10 +41,26 @@ int main() {
             }
             dangNhap(phan[1], phan[2], phan[3]);
 
+        } else if (tenLenh == "list" || tenLenh == "ls") {
+            if (phan.size() != 2) {
+                cout << "Cach dung: list <ten_thu_muc>  (hoac: ls <ten_thu_muc>)\n";
+                cout << "Vi du   : list docs\n";
+                continue;
+            }
+            xemDanhSachFile(phan[1]);
+
+        } else if (tenLenh == "get") {
+            if (phan.size() != 2) {
+                cout << "Cach dung: get <duong_dan_file>\n";
+                cout << "Vi du   : get docs/file1.txt (hoac get docs\\file1.txt)\n";
+                continue;
+            }
+            taiFileDonLe(phan[1]);
+
         } else if (tenLenh == "mget") {
             if (phan.size() != 2) {
                 cout << "Cach dung: mget <ten_thu_muc>\n";
-                cout << "Vi du   : mget docs\n";
+                cout << "Vi du   : mget docs  (hoac tai 1 file: mget docs/file1.txt)\n";
                 continue;
             }
             taiToanBoThuMuc(phan[1]);

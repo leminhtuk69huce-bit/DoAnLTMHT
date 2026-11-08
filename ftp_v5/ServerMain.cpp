@@ -1,6 +1,8 @@
 #include "FTPServer.h"
 #include <iostream>
 #include <string>
+#include <sstream>
+#include <vector>
 
 using namespace std;
 
@@ -16,32 +18,52 @@ int main() {
     cout << "(Go 'help' de xem danh sach lenh)\n";
     cout << "----------------------------------------\n";
 
-    string lenh;
+    string dong;
     while (true) {
         cout << "server> ";
-        getline(cin, lenh);
+        getline(cin, dong);
 
-        if (lenh.empty()) continue;
+        if (dong.empty()) continue;
 
-        if (lenh == "start") {
+        istringstream iss(dong);
+        vector<string> phan;
+        string tu;
+        while (iss >> tu) phan.push_back(tu);
+
+        if (phan.empty()) continue;
+        string tenLenh = phan[0];
+
+        if (tenLenh == "start") {
             khoiDongServer();
 
-        } else if (lenh == "stop") {
+        } else if (tenLenh == "stop") {
             tatServer();
 
-        } else if (lenh == "ip") {
+        } else if (tenLenh == "ip") {
             hienThiIPServer();
 
-        } else if (lenh == "help") {
+        } else if (tenLenh == "adduser") {
+            if (phan.size() != 3) {
+                cout << "Cach dung: adduser <username> <password>\n";
+                cout << "Vi du   : adduser sinhvien 123456\n";
+                continue;
+            }
+            themTaiKhoan(phan[1], phan[2]);
+            cout << "[SERVER] Da tao/cap nhat tai khoan '" << phan[1] << "' thanh cong!\n";
+
+        } else if (tenLenh == "users") {
+            hienThiDanhSachTaiKhoan();
+
+        } else if (tenLenh == "help") {
             troGiupServer();
 
-        } else if (lenh == "exit") {
+        } else if (tenLenh == "exit") {
             tatServer();
             cout << "Chuong trinh ket thuc.\n";
             break;
 
         } else {
-            cout << "Lenh khong hop le. Go 'help' de xem huong dan.\n";
+            cout << "Lenh khong hop le: '" << tenLenh << "'. Go 'help' de xem huong dan.\n";
         }
     }
 

@@ -73,19 +73,44 @@ Cả 2 project đều phải cấu hình bước này:
     - Mang LAN (May khac)  : 192.168.1.168
     => Cu phap ben Client : login <IP> admin 1234
   ```
+- **Tạo thêm tài khoản mới cho người dùng (Mới):**
+  ```text
+  server> adduser sinhvien 123456
+  [SERVER] Da tao/cap nhat tai khoan 'sinhvien' thanh cong!
+  ```
+- **Xem danh sách tài khoản hiện có:**
+  ```text
+  server> users
+  ```
 
 ### 2. Khởi động Client:
-- Mở cửa sổ Client:
-- Gõ đăng nhập:
+- Mở cửa sổ Client.
+- **Đăng nhập:**
   ```text
   client> login 127.0.0.1 admin 1234
   ```
-- Gõ tải toàn bộ thư mục:
+  *(hoặc dùng tài khoản vừa tạo: `login 127.0.0.1 sinhvien 123456`)*
+
+- **Xem danh sách file trong thư mục trước khi tải (Mới):**
+  ```text
+  client> list docs
+  ```
+  *(hoặc gõ tắt: `ls docs`)*
+
+- **Tải một file đơn lẻ (Mới):**
+  ```text
+  client> get docs/file1.txt
+  ```
+  *(hoặc `get docs\file1.txt`)*
+
+- **Tải toàn bộ thư mục (Bulk Download - mget):**
   ```text
   client> mget docs
   ```
+  *(hoặc truyền 1 file cụ thể: `mget docs/file1.txt`)*
   *(Tiến trình tải từng file sẽ hiển thị và lưu vào `client_downloads/`).*
-- Thoát:
+
+- **Thoát:**
   ```text
   client> quit
   ```
