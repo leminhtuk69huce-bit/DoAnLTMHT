@@ -51,6 +51,7 @@ bool khoiTaoWinsock() {
         cout << "Failed. Error Code : " << WSAGetLastError() << "\n";
         return false;
     }
+    CreateDirectoryA(THU_MUC_GOC, NULL);
     return true;
 }
 

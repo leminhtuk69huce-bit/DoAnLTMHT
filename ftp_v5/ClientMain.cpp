@@ -42,12 +42,8 @@ int main() {
             dangNhap(phan[1], phan[2], phan[3]);
 
         } else if (tenLenh == "list" || tenLenh == "ls") {
-            if (phan.size() != 2) {
-                cout << "Cach dung: list <ten_thu_muc>  (hoac: ls <ten_thu_muc>)\n";
-                cout << "Vi du   : list docs\n";
-                continue;
-            }
-            xemDanhSachFile(phan[1]);
+            string muc = (phan.size() >= 2) ? phan[1] : "docs";
+            xemDanhSachFile(muc);
 
         } else if (tenLenh == "get") {
             if (phan.size() != 2) {

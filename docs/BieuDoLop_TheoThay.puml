@@ -1,0 +1,157 @@
+@startuml
+skinparam defaultFontName "Times New Roman"
+skinparam classFontSize 13
+skinparam classAttributeFontSize 12
+skinparam roundCorner 5
+skinparam shadowing false
+skinparam classFontStyle bold
+
+skinparam class {
+    BackgroundColor #F8F9FA
+    ArrowColor #2C3E50
+    BorderColor #2C3E50
+    BorderThickness 1.5
+    HeaderBackgroundColor #2B579A
+    FontColor #FFFFFF
+    AttributeFontColor #2C3E50
+    AttributeFontSize 12
+}
+
+title BIỂU ĐỒ LỚP HỆ THỐNG MẠNG (THEO MÔ HÌNH HƯỚNG ĐỐI TƯỢNG CỦA GIẢNG VIÊN)
+
+' ========================================================
+' TẦNG GIAO DIỆN DÒNG LỆNH (CLI)
+' ========================================================
+class CLI {
+    # isRunning : bool
+    --
+    + CLI()
+    + virtual ~CLI()
+    + virtual run() : void
+    + virtual printHelp() : void
+}
+
+class AppClientCLI {
+    - appClient : AppTCPClient*
+    --
+    + AppClientCLI(client : AppTCPClient*)
+    + run() : void
+    + processCommand(cmd : string) : void
+    + printHelp() : void
+}
+
+class AppServerCLI {
+    - appServer : AppTCPServer*
+    --
+    + AppServerCLI(server : AppTCPServer*)
+    + run() : void
+    + processCommand(cmd : string) : void
+    + printHelp() : void
+}
+
+CLI <|-- AppClientCLI : kế thừa
+CLI <|-- AppServerCLI : kế thừa
+
+' ========================================================
+' TẦNG ỨNG DỤNG MẠNG (TCP CLIENT & TCP SERVER)
+' ========================================================
+class TCPClient {
+    # clientSocket : TCPSocket*
+    # serverIP : string
+    # serverPort : int
+    --
+    + TCPClient()
+    + virtual ~TCPClient()
+    + connectServer(ip : string, port : int) : bool
+    + disconnect() : void
+    + isConnected() : bool
+}
+
+class TCPServer {
+    # serverSocket : TCPServerSocket*
+    # isRunning : bool
+    # port : int
+    --
+    + TCPServer(port : int)
+    + virtual ~TCPServer()
+    + virtual start() : bool
+    + virtual stop() : void
+    + isServerRunning() : bool
+}
+
+class AppTCPClient {
+    - downloadDir : string = "client_downloads"
+    --
+    + AppTCPClient()
+    + login(ip : string, user : string, pass : string) : bool
+    + listFiles(folder : string) : vector<string>
+    + downloadFile(remotePath : string) : bool
+    + bulkDownload(folder : string) : void
+    + quit() : void
+}
+
+class AppTCPServer {
+    - rootDir : string = "server_files"
+    - dsTaiKhoan : map<string, string>
+    --
+    + AppTCPServer(port : int = 21)
+    + handleClient(clientSock : TCPSocket*) : void
+    + handleList(clientSock : TCPSocket*, folder : string) : void
+    + handleRetr(clientSock : TCPSocket*, path : string) : void
+    + addAccount(user : string, pass : string) : bool
+    + showAccounts() : void
+}
+
+TCPClient <|-- AppTCPClient : kế thừa
+TCPServer <|-- AppTCPServer : kế thừa
+
+' ========================================================
+' TẦNG SOCKET MẠNG (WINSOCK ABSTRACTION)
+' ========================================================
+class Socket {
+    # m_socket : SOCKET
+    # m_port : int
+    # m_ip : string
+    --
+    + Socket()
+    + virtual ~Socket()
+    + close() : void
+    + getSocket() : SOCKET
+    + getPort() : int
+}
+
+class TCPSocket {
+    - isConnected : bool
+    --
+    + TCPSocket()
+    + TCPSocket(s : SOCKET)
+    + connectTo(ip : string, port : int) : bool
+    + sendData(buf : const char*, len : int) : int
+    + recvData(buf : char*, maxLen : int) : int
+    + sendLine(line : string) : bool
+    + recvLine() : string
+}
+
+class TCPServerSocket {
+    - isListening : bool
+    --
+    + TCPServerSocket()
+    + open(port : int) : bool
+    + acceptClient() : TCPSocket*
+}
+
+Socket <|-- TCPSocket : kế thừa
+Socket <|-- TCPServerSocket : kế thừa
+
+' ========================================================
+' QUAN HỆ KẾT HỢP VÀ SỬ DỤNG (ASSOCIATION & USAGE)
+' ========================================================
+AppClientCLI --> AppTCPClient : điều khiển (1)
+AppServerCLI --> AppTCPServer : điều khiển (1)
+
+AppTCPClient --> TCPSocket : sử dụng để truyền nhận dữ liệu
+AppTCPServer --> TCPServerSocket : lắng nghe cổng 21
+AppTCPServer --> TCPSocket : quản lý kết nối từng Client
+
+@enduml
+
