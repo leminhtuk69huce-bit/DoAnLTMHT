@@ -1,79 +1,38 @@
-#include "FTPClient.h"
+#include "socket.h"
+#include "ftpclientcli.h"
 #include <iostream>
-#include <string>
-#include <sstream>
-#include <vector>
 
-using namespace std;
+// ============================================================================
+// CHUONG TRINH CHINH FTP CLIENT (ClientMain.cpp)
+// ============================================================================
+int main()
+{
+    try
+    {
+        // 1. Khoi tao thu vien Winsock theo framework cua Thay
+        Socket::startUp();
 
-int main() {
-    // Khoi tao thu vien Winsock
-    if (!khoiTaoWinsock()) {
+        // 2. Khoi tao giao dien dong lenh FTP Client CLI
+        FTPClientCLI cli;
+
+        // 3. Bat dau vong lap doc va thuc thi lenh cua Client
+        cli.run();
+
+        // 4. Don dep thu vien Winsock khi ket thuc chuong trinh
+        Socket::cleanUp();
+    }
+    catch (SocketException& e)
+    {
+        std::cerr << "[ClientMain] Ngoai le Socket: " << e.what() << std::endl;
+        Socket::cleanUp();
+        return 1;
+    }
+    catch (std::exception& e)
+    {
+        std::cerr << "[ClientMain] Ngoai le he thong: " << e.what() << std::endl;
+        Socket::cleanUp();
         return 1;
     }
 
-    cout << "========================================\n";
-    cout << "      FTP CLIENT - DE TAI 13\n";
-    cout << "========================================\n";
-    cout << "(Go 'help' de xem danh sach lenh)\n";
-    cout << "----------------------------------------\n";
-
-    string dong;
-    while (true) {
-        cout << "client> ";
-        getline(cin, dong);
-
-        if (dong.empty()) continue;
-
-        istringstream iss(dong);
-        vector<string> phan;
-        string tu;
-        while (iss >> tu) phan.push_back(tu);
-
-        if (phan.empty()) continue;
-        string tenLenh = phan[0];
-
-        if (tenLenh == "login") {
-            if (phan.size() != 4) {
-                cout << "Cach dung: login <IP> <username> <password>\n";
-                cout << "Vi du   : login 127.0.0.1 admin 1234\n";
-                continue;
-            }
-            dangNhap(phan[1], phan[2], phan[3]);
-
-        } else if (tenLenh == "list" || tenLenh == "ls") {
-            string muc = (phan.size() >= 2) ? phan[1] : "docs";
-            xemDanhSachFile(muc);
-
-        } else if (tenLenh == "get") {
-            if (phan.size() != 2) {
-                cout << "Cach dung: get <duong_dan_file>\n";
-                cout << "Vi du   : get docs/file1.txt (hoac get docs\\file1.txt)\n";
-                continue;
-            }
-            taiFileDonLe(phan[1]);
-
-        } else if (tenLenh == "mget") {
-            if (phan.size() != 2) {
-                cout << "Cach dung: mget <ten_thu_muc>\n";
-                cout << "Vi du   : mget docs  (hoac tai 1 file: mget docs/file1.txt)\n";
-                continue;
-            }
-            taiToanBoThuMuc(phan[1]);
-
-        } else if (tenLenh == "help") {
-            troGiupClient();
-
-        } else if (tenLenh == "quit") {
-            ketThucPhien();
-            break;
-
-        } else {
-            cout << "Lenh khong hop le: '" << tenLenh << "'. Go 'help' de xem huong dan.\n";
-        }
-    }
-
-    donDepWinsock();
     return 0;
 }
-

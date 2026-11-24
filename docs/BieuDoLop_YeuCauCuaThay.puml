@@ -1,198 +1,246 @@
 @startuml
-skinparam defaultFontName "Times New Roman"
-skinparam classFontSize 13
-skinparam classAttributeFontSize 12
-skinparam packageFontSize 14
-skinparam roundCorner 5
+skinparam defaultFontName "Segoe UI"
+skinparam classFontSize 12
+skinparam classAttributeFontSize 11
+skinparam packageFontSize 13
+skinparam roundCorner 8
 skinparam shadowing false
 skinparam classFontStyle bold
 
 skinparam package {
-    BorderColor #2B579A
+    BorderColor #1E40AF
     BorderThickness 1.5
-    FontSize 14
+    FontSize 13
     FontStyle bold
-    BackgroundColor #FAFCFE
-    FontColor #1B365D
+    BackgroundColor #F8FAFC
+    FontColor #0F172A
 }
 
 skinparam class {
     BackgroundColor #FFFFFF
-    ArrowColor #2C3E50
-    BorderColor #2B579A
+    ArrowColor #2563EB
+    BorderColor #0284C7
     BorderThickness 1.5
-    HeaderBackgroundColor #E3F2FD
-    FontColor #0D47A1
-    AttributeFontColor #2C3E50
-    AttributeFontSize 12
+    HeaderBackgroundColor #E0F2FE
+    FontColor #0C4A6E
+    AttributeFontColor #1E293B
+    AttributeFontSize 11
 }
 
-title BIỂU ĐỒ LỚP HỆ THỐNG MẠNG CLIENT - SERVER (THEO QUY CHUẨN GIẢNG VIÊN)
+title BIỂU ĐỒ LỚP HỆ THỐNG MẠNG CLIENT - SERVER (CHUẨN KIẾN TRÚC THẦY BÙI PHONG)
 
 ' ========================================================
 ' PHÂN HỆ CLIENT
 ' ========================================================
-package "Phân hệ Client (Client)" {
+package "Phân hệ Client (Client Side)" {
     class Socket as "Socket" {
-        # m_socket : SOCKET
-        # m_port : int
-        # m_ip : string
+        # sockDesc : int
+        # keepAlive : bool
         --
-        + Socket()
         + virtual ~Socket()
-        + close() : void
+        + virtual close() : void
+        + getLocalAddress() : string
+        + getLocalPort() : unsigned short
+        + {static} startUp() : void
+        + {static} cleanUp() : void
     }
 
     class TCPSocket as "TCPSocket" {
-        - isConnected : bool
         --
         + TCPSocket()
-        + TCPSocket(s : SOCKET)
-        + connectTo(ip : string, port : int) : bool
-        + sendData(buf : const char*, len : int) : int
-        + recvData(buf : char*, maxLen : int) : int
+        + TCPSocket(remoteAddress : string, port : unsigned short)
+        + TCPSocket(newConnSD : int)
+        + connect(remoteAddress : string, port : unsigned short) : void
+        + send(buffer : const void*, bufferLen : int) : int
+        + recv(buffer : void*, bufferLen : int) : int
+        + recvLine(buffer : char*, bufferLen : int) : int
+        + close() : void
     }
 
     class TCPClient as "TCPClient" {
-        # clientSocket : TCPSocket*
-        # serverIP : string
-        # serverPort : int
+        # localsocket : TCPSocket
+        # connected : bool
         --
         + TCPClient()
         + virtual ~TCPClient()
-        + connectServer(ip : string, port : int) : bool
-        + disconnect() : void
+        + open(serverHost : string, port : unsigned short) : bool
+        + close() : void
+        + isConnected() : bool
+        # sendStringRequest(request : string) : int
+        # recvGetLine(buf : char*, maxLen : unsigned int) : int
     }
 
-    class ChargeClient as "FTPClient\n(ChargeClient)" {
+    class FTPClient as "FTPClient\n(ChargeClient / AppClient)" {
         - downloadDir : string = "client_downloads"
         --
-        + login(ip : string, user : string, pass : string) : bool
+        + FTPClient()
+        + login(host : string, port : unsigned short, user : string, pass : string) : bool
         + listFiles(folder : string) : vector<string>
-        + downloadFile(path : string) : bool
+        + downloadFile(remotePath : string) : bool
         + bulkDownload(folder : string) : void
         + quit() : void
     }
 
-    class CLI as "CLI" {
-        # isRunning : bool
+    class CLI as "CmdLineInterface\n(CLI)" {
+        # cmdPrompt : string
+        # bRunning : bool
         --
-        + CLI()
-        + virtual ~CLI()
-        + virtual run() : void
-        + virtual printHelp() : void
+        + CmdLineInterface(prompt : string)
+        + addCmd(name : string, f : CLI_CMD_FUNC) : void
+        + run() : void
+        + showCmdPrompt() : void
     }
 
-    class ChargeClientCLI as "FTPClientCLI\n(ChargeClientCLI)" {
-        - client : FTPClient*
+    class FTPClientCLI as "FTPClientCLI\n(ChargeClientCLI)" {
+        - client : FTPClient
         --
-        + FTPClientCLI(client : FTPClient*)
-        + run() : void
-        + processCommand(cmd : string) : void
-        + printHelp() : void
+        + FTPClientCLI()
+        + initCmd() : void
+        + doLogin(argv : string[], argc : int) : void
+        + doList(argv : string[], argc : int) : void
+        + doGet(argv : string[], argc : int) : void
+        + doMGet(argv : string[], argc : int) : void
+        + doQuit(argv : string[], argc : int) : void
     }
 
     Socket <|-- TCPSocket : kế thừa
-    TCPClient --> TCPSocket : sử dụng
-    TCPClient <|-- ChargeClient : kế thừa
-    CLI <|-- ChargeClientCLI : kế thừa
-    ChargeClientCLI --> ChargeClient : điều khiển
+    TCPClient *-- TCPSocket : chứa localsocket
+    TCPClient <|-- FTPClient : kế thừa
+    CLI <|-- FTPClientCLI : kế thừa
+    FTPClientCLI --> FTPClient : điều khiển
 }
 
 ' ========================================================
 ' PHÂN HỆ SERVER
 ' ========================================================
-package "Phân hệ Server (Server)" {
+package "Phân hệ Server (Server Side)" {
     class ServerSocketBase as "Socket" {
-        # m_socket : SOCKET
-        # m_port : int
-        # m_ip : string
+        # sockDesc : int
         --
-        + Socket()
-        + virtual ~Socket()
-        + close() : void
+        + virtual close() : void
+        + {static} startUp() : void
+        + {static} cleanUp() : void
     }
 
     class ServerTCPSocket as "TCPSocket" {
-        - isConnected : bool
         --
-        + TCPSocket(s : SOCKET)
-        + sendData(buf : const char*, len : int) : int
-        + recvData(buf : char*, maxLen : int) : int
+        + send(buffer : const void*, bufferLen : int) : int
+        + recv(buffer : void*, bufferLen : int) : int
+        + recvLine(buffer : char*, bufferLen : int) : int
+        + close() : void
     }
 
     class TCPServerSocket as "TCPServerSocket" {
-        - isListening : bool
         --
         + TCPServerSocket()
-        + open(port : int) : bool
-        + acceptClient() : TCPSocket*
+        + setListen(port : unsigned short, queueLen : int) : void
+        + accept(timeout : long) : TCPSocket
+        + close() : void
     }
 
     class TCPServer as "TCPServer" {
-        # serverSocket : TCPServerSocket*
-        # isRunning : bool
-        # port : int
+        # master : TCPServerSocket
+        # conf : ServerConfig*
+        # running : bool
+        # port : unsigned short
         --
-        + TCPServer(port : int)
+        + TCPServer(localPort : unsigned short)
         + virtual ~TCPServer()
         + virtual start() : bool
         + virtual stop() : void
+        # run() : void
+        # {abstract} startNewSession(slave : TCPSocket) : void
+        # addCmd(cmdName : string, f : CMD_FUNC) : void
     }
 
-    class ChargeServer as "FTPServer\n(ChargeServer)" {
-        - config : ServerConfig
-        - sessions : vector<Session*>
+    class FTPServer as "FTPServer\n(ChargeServer / AppServer)" {
         --
-        + handleClient(clientSock : TCPSocket*) : void
-        + handleList(clientSock : TCPSocket*, folder : string) : void
-        + handleRetr(clientSock : TCPSocket*, path : string) : void
-        + addAccount(user : string, pass : string) : bool
-    }
-
-    class ServerCLI as "CLI" {
-        # isRunning : bool
-        --
-        + CLI()
-        + virtual ~CLI()
-        + virtual run() : void
-        + virtual printHelp() : void
-    }
-
-    class ChargeServerCLI as "FTPServerCLI\n(ChargeServerCLI)" {
-        - server : FTPServer*
-        --
-        + FTPServerCLI(server : FTPServer*)
-        + run() : void
-        + processCommand(cmd : string) : void
-        + printHelp() : void
+        + FTPServer(port : unsigned short = 21)
+        + configServer() : bool
+        # startNewSession(slave : TCPSocket) : void
+        # initCmd() : void
     }
 
     class Session as "Session" {
-        - clientSocket : TCPSocket*
-        - username : string
-        - isAuthed : bool
+        # slave : TCPSocket
+        # conf : ServerConfig*
+        # quitSession : bool
         --
-        + Session(sock : TCPSocket*)
-        + setAuthed(val : bool) : void
-        + getSocket() : TCPSocket*
+        + Session(slave : TCPSocket, conf : ServerConfig*)
+        + virtual ~Session()
+        + {abstract} doUnknown(argv : string[], argc : int) : void
+        + isQuit() : bool
+    }
+
+    class FTPSession as "FTPSession" {
+        - isLoggedIn : bool
+        - username : string
+        --
+        + FTPSession(slave : TCPSocket, conf : ServerConfig*)
+        + doUser(argv : string[], argc : int) : void
+        + doPass(argv : string[], argc : int) : void
+        + doPasv(argv : string[], argc : int) : void
+        + doList(argv : string[], argc : int) : void
+        + doRetr(argv : string[], argc : int) : void
+        + doQuit(argv : string[], argc : int) : void
+    }
+
+    class Account as "Account" {
+        # username : string
+        - password : string
+        --
+        + Account(username : string)
+        + getUserName() : string
+        + setPassword(pass : string) : void
+        + isValidPassword(pass : string) : bool
     }
 
     class ServerConfig as "ServerConfig" {
-        + port : int = 21
+        # timeout : int
+        # accMap : unordered_map<string, Account*>
+        --
+        + addAccount(acc : Account*) : void
+        + getAccount(username : string) : Account*
+        + authenticate(user : string, pass : string) : bool
+        + {abstract} loadAccountsFromFile(file : string) : bool
+    }
+
+    class FTPServerConfig as "FTPServerConfig" {
         + rootDir : string = "server_files"
-        + maxClients : int = 10
+        --
+        + loadAccountsFromFile(file : string) : bool
+    }
+
+    class ServerCLI as "CmdLineInterface\n(CLI)" {
+        # bRunning : bool
+        --
+        + run() : void
+        + addCmd(...) : void
+    }
+
+    class FTPServerCLI as "FTPServerCLI\n(ChargeServerCLI)" {
+        - server : FTPServer*
+        --
+        + FTPServerCLI()
+        + initCmd() : void
+        + doStart(argv : string[], argc : int) : void
+        + doStop(argv : string[], argc : int) : void
+        + doAddUser(argv : string[], argc : int) : void
+        + doUsers(argv : string[], argc : int) : void
     }
 
     ServerSocketBase <|-- ServerTCPSocket : kế thừa
     ServerSocketBase <|-- TCPServerSocket : kế thừa
-    TCPServer <|-- ChargeServer : kế thừa
-    ChargeServer --> TCPServerSocket : lắng nghe cổng 21
-    ChargeServer --> ServerTCPSocket : giao tiếp dữ liệu
-    ChargeServer --> Session : quản lý phiên
-    ChargeServer --> ServerConfig : cấu hình
-    ServerCLI <|-- ChargeServerCLI : kế thừa
-    ChargeServerCLI --> ChargeServer : điều khiển
+    TCPServer *-- TCPServerSocket : chứa master
+    TCPServer <|-- FTPServer : kế thừa
+    Session *-- ServerTCPSocket : chứa slave
+    Session <|-- FTPSession : kế thừa
+    ServerConfig o-- Account : chứa danh sách
+    ServerConfig <|-- FTPServerConfig : kế thừa
+    FTPServer --> FTPServerConfig : sử dụng cấu hình
+    FTPServer --> FTPSession : quản lý phiên
+    ServerCLI <|-- FTPServerCLI : kế thừa
+    FTPServerCLI --> FTPServer : điều khiển
 }
 
 @enduml

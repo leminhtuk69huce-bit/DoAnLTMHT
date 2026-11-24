@@ -1,41 +1,59 @@
 #ifndef FTPCLIENT_H
 #define FTPCLIENT_H
 
-#include <winsock2.h>
-#include <windows.h>
-#include <iostream>
+#include "tcpclient.h"
 #include <string>
 #include <vector>
 
-// ══════════════════════════════════════════
-// CAI DAT CHUNG
-// ══════════════════════════════════════════
-#define CONG_FTP     21                   // Cong dieu khien FTP chuan
-#define THU_MUC_TAI  "client_downloads"  // Thu muc luu file tai ve
+using namespace std;
 
-// ══════════════════════════════════════════
-// KHAI BAO CAC HAM CUA CLIENT
-// ══════════════════════════════════════════
+// ============================================================================
+// LOP FTPClient: Ke thua tu TcpClient (Framework cua Thay Bui Phong)
+// Thuc hien giao thuc FTP phia Client: dang nhap, liet ke thu muc,
+// tai file don le va tai toan bo thu muc (Bulk Download - De tai 13)
+// ============================================================================
+class FTPClient : public TcpClient
+{
+private:
+    string downloadDir;      // Thu muc luu tru file tai ve o phia Client
+    string currentUser;      // Ten nguoi dung hien tai dang dang nhap
+    bool isAuthed;           // Trang thai da xac thuc thanh cong hay chua
+    string serverHost;       // Dia chi IP hoac ten mien cua Server
+    unsigned short serverPort; // Cong dieu khien cua Server (mac dinh 21)
 
-// Khoi tao va don dep Winsock
-bool khoiTaoWinsock();
-void donDepWinsock();
+public:
+    FTPClient();
+    virtual ~FTPClient();
 
-// Cac chuc nang chinh theo yeu cau de bai
-void troGiupClient();
-void dangNhap(const std::string& ip, const std::string& tenND, const std::string& matKhau);
-void xemDanhSachFile(const std::string& tenThuMuc);
-void taiToanBoThuMuc(const std::string& tenThuMuc);
-void taiFileDonLe(const std::string& duongDanFile);
-void ketThucPhien();
+    // 1. Dang nhap vao FTP Server voi IP, Port, Username, Password
+    bool login(const string& host, unsigned short port, const string& user, const string& pass);
 
-// Cac ham ho tro giao thuc FTP
-void guiLenh(SOCKET s, const std::string& lenh);
-std::string nhanPhanHoi(SOCKET s);
-int laySoCong(const std::string& phanHoi);
-SOCKET ketNoiData(int soCong);
-std::vector<std::string> layDanhSachFile(const std::string& tenThuMuc);
-void taiMotFile(const std::string& tenThuMuc, const std::string& tenFile, int soThuTu, int tongSo);
+    // 2. Lay danh sach tep tin/thu muc tu Server
+    vector<string> listFiles(const string& folder = "");
+
+    // 3. Tai mot file don le tu Server ve client_downloads/
+    bool downloadFile(const string& remotePath);
+
+    // 4. CHUC NANG CHINH DE TAI 13: Tai toan bo mot thu muc (Bulk Download)
+    void bulkDownload(const string& folder);
+
+    // 5. Ket thuc phien lam viec va dong ket noi
+    void quitSession();
+
+    // Kiem tra da dang nhap chua
+    bool isAuthenticated() const { return isAuthed; }
+    const string& getCurrentUser() const { return currentUser; }
+    const string& getDownloadDir() const { return downloadDir; }
+
+private:
+    // Gui lenh va nhan phan hoi tren kenh dieu khien (localsocket)
+    bool sendCommand(const string& cmd, string& response);
+
+    // Doc mot dong phan hoi tu kenh dieu khien
+    string readResponse();
+
+    // Thiet lap kenh du lieu thu dong (PASV) de truyen nhan file hoac danh sach
+    bool openDataConnection(TcpSocket& dataSocket);
+};
 
 #endif // FTPCLIENT_H
-

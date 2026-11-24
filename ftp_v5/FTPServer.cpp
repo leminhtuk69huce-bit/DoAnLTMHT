@@ -1,412 +1,149 @@
-#include "FTPServer.h"
+#include "ftpserver.h"
+#include <iostream>
 #include <sstream>
-#include <fstream>
-#include <thread>
-#include <map>
 
-using namespace std;
-#pragma comment(lib, "ws2_32.lib")
+// ============================================================================
+// Trien khai lop FTPServer ke thua tu TCPServer
+// ============================================================================
 
-// ══════════════════════════════════════════
-// BIEN TOAN CUC CUA SERVER
-// ══════════════════════════════════════════
-// Danh sach tai khoan he thong: ten_dang_nhap -> mat_khau
-map<string, string> dsTaiKhoan = {
-    {"admin", "1234"},
-    {"user1", "1234"}
-};
+FTPServer::FTPServer(unsigned short port) : TCPServer(port)
+{
+    // 1. Khoi tao bang lenh ma Server ho tro
+    initCmd();
 
-SOCKET socketChinh = INVALID_SOCKET;
-bool   dangChay    = false;
+    // 2. Khoi tao doi tuong quan ly cau hinh va tai khoan FTP
+    conf = new FTPServerConfig();
+}
 
+FTPServer::~FTPServer()
+{
+    if (isRunning())
+    {
+        stop();
+    }
+}
 
-// ══════════════════════════════════════════
-// QUAN LY TAI KHOAN NGUOI DUNG
-// ══════════════════════════════════════════
-
-bool themTaiKhoan(const string& user, const string& pass) {
-    if (user.empty() || pass.empty()) return false;
-    dsTaiKhoan[user] = pass;
+bool FTPServer::configServer()
+{
+    // Nap tai khoan nguoi dung tu tap tin cau hinh
+    cout << "[FTP Server] Nap cau hinh thanh cong. Thu muc goc: " 
+         << getFTPConfig()->getRootDir() << endl;
     return true;
 }
 
-void hienThiDanhSachTaiKhoan() {
-    cout << "\n=== DANH SACH TAI KHOAN HE THONG ===\n";
-    int stt = 1;
-    for (const auto& item : dsTaiKhoan) {
-        cout << "  " << stt++ << ". " << item.first << " (mat khau: " << item.second << ")\n";
+void FTPServer::initCmd()
+{
+    // Dang ky cac lenh FTP chuan theo kien truc cua Thay
+    // Su dung FUNC_CAST de ep kieu con tro ham thanh vien ve CMD_FUNC
+    addCmd("USER", FUNC_CAST(&FTPSession::doUser));
+    addCmd("PASS", FUNC_CAST(&FTPSession::doPass));
+    addCmd("PASV", FUNC_CAST(&FTPSession::doPasv));
+    addCmd("LIST", FUNC_CAST(&FTPSession::doList));
+    addCmd("RETR", FUNC_CAST(&FTPSession::doRetr));
+    addCmd("QUIT", FUNC_CAST(&FTPSession::doQuit));
+    addCmd("NOOP", FUNC_CAST(&FTPSession::doNoop));
+}
+
+int FTPServer::readCmd(TcpSocket& slave, string& cmdLine)
+{
+    try
+    {
+        char buffer[256];
+        // Doc mot dong ket thuc bang ky tu xuong dong (\r\n)
+        int bytesRead = slave.recvLine(buffer, sizeof(buffer));
+        if (bytesRead >= 2)
+        {
+            // Cat bo ky tu \r\n o cuoi xau
+            if (buffer[bytesRead - 1] == '\n') buffer[bytesRead - 1] = '\0';
+            if (bytesRead >= 2 && buffer[bytesRead - 2] == '\r') buffer[bytesRead - 2] = '\0';
+            cmdLine = buffer;
+        }
+        else if (bytesRead > 0)
+        {
+            buffer[bytesRead] = '\0';
+            cmdLine = buffer;
+        }
+        return bytesRead;
     }
-    cout << "====================================\n\n";
-}
-
-
-// ══════════════════════════════════════════
-// KHOI TAO & DON DEP WINSOCK
-// ══════════════════════════════════════════
-
-bool khoiTaoWinsock() {
-    WSADATA wsa;
-    cout << "Initialising Winsock...Initialised.\n\n";
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-        cout << "Failed. Error Code : " << WSAGetLastError() << "\n";
-        return false;
+    catch (SocketException& e)
+    {
+        cerr << "[FTP Server] Loi doc lenh: " << e.what() << endl;
+        return -1;
     }
-    CreateDirectoryA(THU_MUC_GOC, NULL);
-    return true;
 }
 
-void donDepWinsock() {
-    WSACleanup();
-}
+unsigned short FTPServer::parseCmd(const string& cmdLine, string cmd_argv[], int& cmd_argc)
+{
+    cmd_argc = 0;
+    istringstream iss(cmdLine);
 
-
-// ══════════════════════════════════════════
-// HAM TIEN ICH: GUI / NHAN QUA SOCKET
-// ══════════════════════════════════════════
-
-void guiPhanHoi(SOCKET s, const string& thongBao) {
-    string truyen = thongBao + "\r\n";
-    send(s, truyen.c_str(), (int)truyen.size(), 0);
-}
-
-string nhanLenh(SOCKET s) {
-    string ket = "";
-    char c;
-    while (true) {
-        int r = recv(s, &c, 1, 0);
-        if (r <= 0) break;
-        if (c == '\n') break;
-        if (c != '\r') ket += c;
+    // Tach dong lenh thanh cac tu (argument) qua khoang trang
+    while (cmd_argc < SERVER_CMD_ARG_NUM && (iss >> cmd_argv[cmd_argc]))
+    {
+        cmd_argc++;
     }
-    return ket;
-}
 
+    // Tim kiem xem tu dau tien (ten lenh) co trong bang lenh hay khong
+    if (cmd_argc > 0 && !cmd_argv[0].empty())
+    {
+        // Chuyen ten lenh thanh chu hoa de ho tro ca chu thuong va chu hoa
+        string cmdUpper = cmd_argv[0];
+        for (size_t i = 0; i < cmdUpper.size(); ++i)
+        {
+            cmdUpper[i] = toupper(cmdUpper[i]);
+        }
+        cmd_argv[0] = cmdUpper;
 
-// ══════════════════════════════════════════
-// HIEN THI IP & HUONG DAN (HELP)
-// ══════════════════════════════════════════
-
-void hienThiIPServer() {
-    cout << "[SERVER] Dia chi IP de Client ket noi:\n";
-    cout << "  - Cung may (Localhost) : 127.0.0.1\n";
-
-    char tenMay[256];
-    if (gethostname(tenMay, sizeof(tenMay)) == 0) {
-        struct hostent* he = gethostbyname(tenMay);
-        if (he != NULL) {
-            for (int i = 0; he->h_addr_list[i] != NULL; ++i) {
-                struct in_addr addr;
-                memcpy(&addr, he->h_addr_list[i], sizeof(struct in_addr));
-                string ipStr = inet_ntoa(addr);
-                if (ipStr != "127.0.0.1") {
-                    cout << "  - Mang LAN (May khac)  : " << ipStr << "\n";
-                }
+        for (int i = 0; i < this->numCmd; i++)
+        {
+            if (cmdUpper == cmdNameList[i])
+            {
+                return i; // Tra ve ID cua lenh tim thay
             }
         }
     }
-    cout << "  => Cu phap ben Client : login <IP> admin 1234\n";
+    return SERVER_CMD_UNKNOWN;
 }
 
-void troGiupServer() {
-    cout << "\n================= HUONG DAN LENH SERVER ================\n";
-    cout << "  start                 : Khoi dong server va lang nghe tren cong " << CONG_FTP << "\n";
-    cout << "  stop                  : Tam dung server\n";
-    cout << "  adduser <user> <pass> : Tao tai khoan moi cho nguoi dung\n";
-    cout << "  users                 : Xem danh sach tai khoan he thong\n";
-    cout << "  ip                    : Hien thi lai dia chi IP cua server\n";
-    cout << "  help                  : Hien thi danh sach huong dan lenh\n";
-    cout << "  exit                  : Tat server va thoat chuong trinh\n";
-    cout << "========================================================\n\n";
-}
+void FTPServer::startNewSession(TcpSocket slave)
+{
+    // Tao mot phien lam viec moi (FTPSession) cho ket noi tu Client
+    FTPSession* session = new FTPSession(slave, conf);
+    string cmdLine;
+    string cmdArgv[SERVER_CMD_ARG_NUM];
+    int cmdArgc = 0;
+    unsigned short cmdId = 0;
 
+    try
+    {
+        // 1. Gui thong bao chao mung khi Client vua ket noi thanh cong
+        slave.send("220 Welcome to Simple FTP Server v5 (Bulk Download Ready)\r\n");
 
-// ══════════════════════════════════════════
-// TAO DATA CONNECTION
-// ══════════════════════════════════════════
+        // 2. Vong lap nhan va thuc thi lenh cho den khi phien ket thuc (QUIT)
+        while (!session->isQuit())
+        {
+            int cmdLen = readCmd(slave, cmdLine);
+            if (cmdLen <= 0)
+            {
+                // Client da dong ket noi dot ngot
+                break;
+            }
 
-SOCKET taoDataServer(int& cong) {
-    SOCKET ds = socket(AF_INET, SOCK_STREAM, 0);
+            if (cmdLine.empty()) continue;
 
-    sockaddr_in diaChi;
-    diaChi.sin_family      = AF_INET;
-    diaChi.sin_addr.s_addr = INADDR_ANY;
-    diaChi.sin_port        = htons(0);   // Port 0: he dieu hanh tu cap cong trong
+            // 3. Phan tich cu phap dong lenh
+            cmdId = parseCmd(cmdLine, cmdArgv, cmdArgc);
 
-    bind(ds, (sockaddr*)&diaChi, sizeof(diaChi));
-
-    sockaddr_in diaChiBound;
-    int len = sizeof(diaChiBound);
-    getsockname(ds, (sockaddr*)&diaChiBound, &len);
-    cong = ntohs(diaChiBound.sin_port);
-
-    listen(ds, 1);
-    return ds;
-}
-
-
-// ══════════════════════════════════════════
-// DOC DANH SACH FILE
-// ══════════════════════════════════════════
-
-vector<string> layDanhSachFile(const string& tenThuMuc) {
-    vector<string> dsFile;
-    string pattern = string(THU_MUC_GOC) + "\\" + tenThuMuc + "\\*";
-
-    WIN32_FIND_DATAA timKiem;
-    HANDLE hFind = FindFirstFileA(pattern.c_str(), &timKiem);
-
-    if (hFind == INVALID_HANDLE_VALUE) {
-        return dsFile;
-    }
-
-    do {
-        bool laThuMucCon = (timKiem.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-        bool laDauCham   = (string(timKiem.cFileName) == "." || string(timKiem.cFileName) == "..");
-
-        if (!laThuMucCon && !laDauCham) {
-            dsFile.push_back(timKiem.cFileName);
+            // 4. Goi ham xu ly tuong ung trong FTPSession
+            doCmd(session, cmdId, cmdArgv, cmdArgc);
         }
-    } while (FindNextFileA(hFind, &timKiem));
 
-    FindClose(hFind);
-    return dsFile;
-}
-
-
-// ══════════════════════════════════════════
-// XU LY XAC THUC (USER & PASS)
-// ══════════════════════════════════════════
-
-bool xacThuc(SOCKET ctrl) {
-    string lenh = nhanLenh(ctrl);
-    cout << "[SERVER] Nhan: " << lenh << "\n";
-
-    if (lenh.size() < 6 || lenh.substr(0, 5) != "USER ") {
-        guiPhanHoi(ctrl, "500 Lenh khong hop le");
-        return false;
+        // 5. Giai phong phien lam viec khi hoan tat
+        delete session;
     }
-    string tenND = lenh.substr(5);
-    guiPhanHoi(ctrl, "331 Password required");
-
-    lenh = nhanLenh(ctrl);
-    cout << "[SERVER] Nhan: PASS ****\n";
-
-    if (lenh.size() < 6 || lenh.substr(0, 5) != "PASS ") {
-        guiPhanHoi(ctrl, "500 Lenh khong hop le");
-        return false;
+    catch (SocketException& e)
+    {
+        cerr << "[FTP Server] Ngoai le phien lam viec: " << e.what() << endl;
+        delete session;
     }
-    string matKhauNhap = lenh.substr(5);
-
-    // Kiem tra trong danh sach tai khoan he thong
-    auto it = dsTaiKhoan.find(tenND);
-    if (it != dsTaiKhoan.end() && it->second == matKhauNhap) {
-        guiPhanHoi(ctrl, "230 Login successful");
-        cout << "[SERVER] Xac thuc thanh cong cho user '" << tenND << "'\n";
-        return true;
-    } else {
-        guiPhanHoi(ctrl, "530 Login incorrect");
-        cout << "[SERVER] Xac thuc that bai cho user '" << tenND << "'\n";
-        return false;
-    }
-}
-
-
-// ══════════════════════════════════════════
-// XU LY LENH LIST
-// ══════════════════════════════════════════
-
-void xuLyList(SOCKET ctrl, const string& tenThuMuc) {
-    string duongDanThuMuc = string(THU_MUC_GOC) + "\\" + tenThuMuc;
-    DWORD thuocTinh = GetFileAttributesA(duongDanThuMuc.c_str());
-    bool tonTai = (thuocTinh != INVALID_FILE_ATTRIBUTES) &&
-                  (thuocTinh & FILE_ATTRIBUTE_DIRECTORY);
-
-    if (!tonTai) {
-        guiPhanHoi(ctrl, "550 Directory not found");
-        cout << "[SERVER] Thu muc '" << tenThuMuc << "' khong ton tai\n";
-        return;
-    }
-
-    vector<string> dsFile = layDanhSachFile(tenThuMuc);
-    cout << "[SERVER] Thu muc '" << tenThuMuc << "' co " << dsFile.size() << " file\n";
-
-    int cong;
-    SOCKET ds = taoDataServer(cong);
-    guiPhanHoi(ctrl, "150 " + to_string(cong) + " Opening data connection");
-
-    sockaddr_in diaChiClient;
-    int lenClient = sizeof(diaChiClient);
-    SOCKET dataConn = accept(ds, (sockaddr*)&diaChiClient, &lenClient);
-
-    for (const string& tenFile : dsFile) {
-        string dong = tenFile + "\r\n";
-        send(dataConn, dong.c_str(), (int)dong.size(), 0);
-    }
-
-    closesocket(dataConn);
-    closesocket(ds);
-
-    guiPhanHoi(ctrl, "226 Transfer complete");
-    cout << "[SERVER] Da gui xong danh sach file\n";
-}
-
-
-// ══════════════════════════════════════════
-// XU LY LENH RETR
-// ══════════════════════════════════════════
-
-void xuLyRetr(SOCKET ctrl, const string& duongDanFile) {
-    string duongDanChuan = duongDanFile;
-    for (char& c : duongDanChuan) {
-        if (c == '/') c = '\\';
-    }
-
-    string duongDanDayDu = string(THU_MUC_GOC) + "\\" + duongDanChuan;
-
-    ifstream file(duongDanDayDu, ios::binary);
-    if (!file.is_open()) {
-        guiPhanHoi(ctrl, "550 File not found");
-        cout << "[SERVER] File '" << duongDanFile << "' khong ton tai\n";
-        return;
-    }
-
-    cout << "[SERVER] Dang gui file: " << duongDanFile << "\n";
-
-    int cong;
-    SOCKET ds = taoDataServer(cong);
-    guiPhanHoi(ctrl, "150 " + to_string(cong) + " Opening data connection");
-
-    sockaddr_in diaChiClient;
-    int lenClient = sizeof(diaChiClient);
-    SOCKET dataConn = accept(ds, (sockaddr*)&diaChiClient, &lenClient);
-
-    char buffer[4096];
-    while (file.read(buffer, sizeof(buffer)) || file.gcount() > 0) {
-        int soByte = (int)file.gcount();
-        send(dataConn, buffer, soByte, 0);
-    }
-    file.close();
-
-    closesocket(dataConn);
-    closesocket(ds);
-
-    guiPhanHoi(ctrl, "226 Transfer complete");
-    cout << "[SERVER] Da gui xong file: " << duongDanFile << "\n";
-}
-
-
-// ══════════════════════════════════════════
-// XU LY CLIENT (THREAD)
-// ══════════════════════════════════════════
-
-void xuLyClient(SOCKET ctrl) {
-    guiPhanHoi(ctrl, "220 FTP Server Ready");
-
-    if (!xacThuc(ctrl)) {
-        closesocket(ctrl);
-        return;
-    }
-
-    while (true) {
-        string lenh = nhanLenh(ctrl);
-        if (lenh.empty()) break;
-
-        cout << "[SERVER] Nhan lenh: " << lenh << "\n";
-
-        if (lenh.size() > 5 && lenh.substr(0, 5) == "LIST ") {
-            string tenThuMuc = lenh.substr(5);
-            xuLyList(ctrl, tenThuMuc);
-
-        } else if (lenh.size() > 5 && lenh.substr(0, 5) == "RETR ") {
-            string duongDan = lenh.substr(5);
-            xuLyRetr(ctrl, duongDan);
-
-        } else if (lenh == "QUIT") {
-            guiPhanHoi(ctrl, "221 Goodbye");
-            cout << "[SERVER] Client da ngat ket noi\n";
-            break;
-
-        } else {
-            guiPhanHoi(ctrl, "500 Unknown command");
-        }
-    }
-
-    closesocket(ctrl);
-}
-
-
-// ══════════════════════════════════════════
-// VONG LAP ACCEPT
-// ══════════════════════════════════════════
-
-void vongLapAccept() {
-    while (dangChay) {
-        sockaddr_in diaChiClient;
-        int lenClient = sizeof(diaChiClient);
-
-        SOCKET clientSocket = accept(socketChinh, (sockaddr*)&diaChiClient, &lenClient);
-        if (clientSocket == INVALID_SOCKET) break;
-
-        cout << "[SERVER] Client " << inet_ntoa(diaChiClient.sin_addr) << " da ket noi\n";
-
-        thread t(xuLyClient, clientSocket);
-        t.detach();
-    }
-}
-
-
-// ══════════════════════════════════════════
-// KHOI DONG & TAT SERVER
-// ══════════════════════════════════════════
-
-void khoiDongServer() {
-    if (dangChay) {
-        cout << "[SERVER] Server da dang chay roi!\n";
-        return;
-    }
-
-    socketChinh = socket(AF_INET, SOCK_STREAM, 0);
-    if (socketChinh == INVALID_SOCKET) {
-        cout << "[SERVER] Loi tao socket: " << WSAGetLastError() << "\n";
-        return;
-    }
-    cout << "Socket created.\n";
-
-    int opt = 1;
-    setsockopt(socketChinh, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt));
-
-    sockaddr_in serverAddr;
-    serverAddr.sin_family      = AF_INET;
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port        = htons(CONG_FTP);
-
-    if (bind(socketChinh, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        cout << "[SERVER] Loi bind cong " << CONG_FTP << ": " << WSAGetLastError() << "\n";
-        cout << "         Giai phap: Chay ung dung bang 'Run as administrator'\n";
-        closesocket(socketChinh);
-        socketChinh = INVALID_SOCKET;
-        return;
-    }
-    cout << "Bind done.\n";
-
-    listen(socketChinh, 5);
-
-    dangChay = true;
-    cout << "[SERVER] Dang lang nghe tren cong " << CONG_FTP << "...\n";
-
-    hienThiIPServer();
-
-    thread t(vongLapAccept);
-    t.detach();
-}
-
-void tatServer() {
-    if (!dangChay) {
-        cout << "[SERVER] Server chua chay!\n";
-        return;
-    }
-    dangChay = false;
-    closesocket(socketChinh);
-    socketChinh = INVALID_SOCKET;
-    cout << "[SERVER] Da tat server.\n";
 }

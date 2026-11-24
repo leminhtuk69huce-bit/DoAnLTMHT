@@ -1,20 +1,21 @@
 @startuml
-skinparam defaultFontName "Times New Roman"
-skinparam classFontSize 13
-skinparam classAttributeFontSize 12
-skinparam roundCorner 5
+skinparam defaultFontName "Segoe UI"
+skinparam classFontSize 12
+skinparam classAttributeFontSize 11
+skinparam packageFontSize 13
+skinparam roundCorner 8
 skinparam shadowing false
 skinparam classFontStyle bold
 
 skinparam class {
-    BackgroundColor #F8F9FA
-    ArrowColor #2C3E50
-    BorderColor #2C3E50
+    BackgroundColor #FFFFFF
+    ArrowColor #2563EB
+    BorderColor #0284C7
     BorderThickness 1.5
-    HeaderBackgroundColor #2B579A
-    FontColor #FFFFFF
-    AttributeFontColor #2C3E50
-    AttributeFontSize 12
+    HeaderBackgroundColor #E0F2FE
+    FontColor #0C4A6E
+    AttributeFontColor #1E293B
+    AttributeFontSize 11
 }
 
 title BIỂU ĐỒ LỚP HỆ THỐNG MẠNG (THEO MÔ HÌNH HƯỚNG ĐỐI TƯỢNG CỦA GIẢNG VIÊN)
@@ -22,136 +23,131 @@ title BIỂU ĐỒ LỚP HỆ THỐNG MẠNG (THEO MÔ HÌNH HƯỚNG ĐỐI TƯ
 ' ========================================================
 ' TẦNG GIAO DIỆN DÒNG LỆNH (CLI)
 ' ========================================================
-class CLI {
-    # isRunning : bool
+class CmdLineInterface as "CmdLineInterface\n(CLI)" {
+    # cmdPrompt : string
+    # bRunning : bool
     --
-    + CLI()
-    + virtual ~CLI()
-    + virtual run() : void
-    + virtual printHelp() : void
-}
-
-class AppClientCLI {
-    - appClient : AppTCPClient*
-    --
-    + AppClientCLI(client : AppTCPClient*)
+    + CmdLineInterface(prompt : string)
+    + virtual ~CmdLineInterface()
+    + addCmd(name : string, f : CLI_CMD_FUNC) : void
     + run() : void
-    + processCommand(cmd : string) : void
-    + printHelp() : void
+    + showCmdPrompt() : void
 }
 
-class AppServerCLI {
-    - appServer : AppTCPServer*
+class FTPClientCLI as "FTPClientCLI\n(AppClientCLI)" {
+    - client : FTPClient
     --
-    + AppServerCLI(server : AppTCPServer*)
-    + run() : void
-    + processCommand(cmd : string) : void
-    + printHelp() : void
+    + FTPClientCLI()
+    + initCmd() : void
+    + doLogin(argv : string[], argc : int) : void
+    + doList(argv : string[], argc : int) : void
+    + doGet(argv : string[], argc : int) : void
+    + doMGet(argv : string[], argc : int) : void
 }
 
-CLI <|-- AppClientCLI : kế thừa
-CLI <|-- AppServerCLI : kế thừa
+class FTPServerCLI as "FTPServerCLI\n(AppServerCLI)" {
+    - server : FTPServer*
+    --
+    + FTPServerCLI()
+    + initCmd() : void
+    + doStart(argv : string[], argc : int) : void
+    + doStop(argv : string[], argc : int) : void
+    + doAddUser(argv : string[], argc : int) : void
+    + doUsers(argv : string[], argc : int) : void
+}
+
+CmdLineInterface <|-- FTPClientCLI : kế thừa
+CmdLineInterface <|-- FTPServerCLI : kế thừa
 
 ' ========================================================
 ' TẦNG ỨNG DỤNG MẠNG (TCP CLIENT & TCP SERVER)
 ' ========================================================
-class TCPClient {
-    # clientSocket : TCPSocket*
-    # serverIP : string
-    # serverPort : int
+class TcpClient as "TcpClient" {
+    # localsocket : TcpSocket
+    # connected : bool
     --
-    + TCPClient()
-    + virtual ~TCPClient()
-    + connectServer(ip : string, port : int) : bool
-    + disconnect() : void
+    + TcpClient()
+    + virtual ~TcpClient()
+    + open(serverHost : string, port : unsigned short) : bool
+    + close() : void
     + isConnected() : bool
 }
 
-class TCPServer {
-    # serverSocket : TCPServerSocket*
-    # isRunning : bool
-    # port : int
+class TCPServer as "TCPServer" {
+    # master : TcpServerSocket
+    # conf : ServerConfig*
+    # running : bool
+    # port : unsigned short
     --
-    + TCPServer(port : int)
+    + TCPServer(localPort : unsigned short)
     + virtual ~TCPServer()
     + virtual start() : bool
     + virtual stop() : void
-    + isServerRunning() : bool
+    + isRunning() : bool
+    # run() : void
+    # {abstract} startNewSession(slave : TcpSocket) : void
 }
 
-class AppTCPClient {
+class FTPClient as "FTPClient\n(AppTCPClient)" {
     - downloadDir : string = "client_downloads"
     --
-    + AppTCPClient()
-    + login(ip : string, user : string, pass : string) : bool
+    + login(host : string, port : int, user : string, pass : string) : bool
     + listFiles(folder : string) : vector<string>
     + downloadFile(remotePath : string) : bool
     + bulkDownload(folder : string) : void
     + quit() : void
 }
 
-class AppTCPServer {
-    - rootDir : string = "server_files"
-    - dsTaiKhoan : map<string, string>
+class FTPServer as "FTPServer\n(AppTCPServer)" {
     --
-    + AppTCPServer(port : int = 21)
-    + handleClient(clientSock : TCPSocket*) : void
-    + handleList(clientSock : TCPSocket*, folder : string) : void
-    + handleRetr(clientSock : TCPSocket*, path : string) : void
-    + addAccount(user : string, pass : string) : bool
-    + showAccounts() : void
+    + FTPServer(port : unsigned short = 21)
+    + configServer() : bool
+    # startNewSession(slave : TcpSocket) : void
 }
 
-TCPClient <|-- AppTCPClient : kế thừa
-TCPServer <|-- AppTCPServer : kế thừa
+TcpClient <|-- FTPClient : kế thừa
+TCPServer <|-- FTPServer : kế thừa
 
 ' ========================================================
-' TẦNG SOCKET MẠNG (WINSOCK ABSTRACTION)
+' TẦNG SOCKET MẠNG (SOCKET ABSTRACTION)
 ' ========================================================
-class Socket {
-    # m_socket : SOCKET
-    # m_port : int
-    # m_ip : string
+class Socket as "Socket" {
+    # sockDesc : int
     --
-    + Socket()
     + virtual ~Socket()
+    + virtual close() : void
+    + {static} startUp() : void
+    + {static} cleanUp() : void
+}
+
+class TcpSocket as "TcpSocket" {
+    --
+    + TcpSocket()
+    + connect(remoteAddress : string, port : unsigned short) : void
+    + send(buffer : const void*, bufferLen : int) : int
+    + recv(buffer : void*, bufferLen : int) : int
+    + recvLine(buffer : char*, bufferLen : int) : int
     + close() : void
-    + getSocket() : SOCKET
-    + getPort() : int
 }
 
-class TCPSocket {
-    - isConnected : bool
+class TcpServerSocket as "TcpServerSocket" {
     --
-    + TCPSocket()
-    + TCPSocket(s : SOCKET)
-    + connectTo(ip : string, port : int) : bool
-    + sendData(buf : const char*, len : int) : int
-    + recvData(buf : char*, maxLen : int) : int
-    + sendLine(line : string) : bool
-    + recvLine() : string
+    + TcpServerSocket()
+    + setListen(port : unsigned short, queueLen : int) : void
+    + accept(timeout : long) : TcpSocket
 }
 
-class TCPServerSocket {
-    - isListening : bool
-    --
-    + TCPServerSocket()
-    + open(port : int) : bool
-    + acceptClient() : TCPSocket*
-}
-
-Socket <|-- TCPSocket : kế thừa
-Socket <|-- TCPServerSocket : kế thừa
+Socket <|-- TcpSocket : kế thừa
+Socket <|-- TcpServerSocket : kế thừa
 
 ' ========================================================
 ' QUAN HỆ KẾT HỢP VÀ SỬ DỤNG (ASSOCIATION & USAGE)
 ' ========================================================
-AppClientCLI --> AppTCPClient : điều khiển (1)
-AppServerCLI --> AppTCPServer : điều khiển (1)
+FTPClientCLI --> FTPClient : điều khiển
+FTPServerCLI --> FTPServer : điều khiển
 
-AppTCPClient --> TCPSocket : sử dụng để truyền nhận dữ liệu
-AppTCPServer --> TCPServerSocket : lắng nghe cổng 21
-AppTCPServer --> TCPSocket : quản lý kết nối từng Client
+TcpClient *-- TcpSocket : chứa localsocket
+TCPServer *-- TcpServerSocket : chứa master
+FTPServer --> TcpSocket : truyền nhận phiên làm việc
 
 @enduml
-

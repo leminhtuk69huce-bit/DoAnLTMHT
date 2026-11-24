@@ -1,378 +1,371 @@
-#include "FTPClient.h"
-#include <sstream>
+#include "ftpclient.h"
+#include <iostream>
 #include <fstream>
+#include <sstream>
+#include <windows.h>
 
-using namespace std;
-#pragma comment(lib, "ws2_32.lib")
+FTPClient::FTPClient()
+{
+    this->downloadDir = "client_downloads";
+    this->currentUser = "";
+    this->isAuthed = false;
+    this->serverHost = "127.0.0.1";
+    this->serverPort = 21;
 
-// ══════════════════════════════════════════
-// BIEN TOAN CUC CUA CLIENT
-// ══════════════════════════════════════════
-SOCKET socketDieuKhien = INVALID_SOCKET;
-string serverIP        = "";
+    // Tao thu muc client_downloads neu chua ton tai
+    CreateDirectoryA(downloadDir.c_str(), NULL);
+}
 
+FTPClient::~FTPClient()
+{
+    quitSession();
+}
 
-// ══════════════════════════════════════════
-// KHOI TAO & DON DEP WINSOCK
-// ══════════════════════════════════════════
+string FTPClient::readResponse()
+{
+    char buffer[512];
+    int bytes = recvGetLine(buffer, sizeof(buffer));
+    if (bytes > 0)
+    {
+        // Loai bo \r\n o cuoi dong
+        if (buffer[bytes - 1] == '\n') buffer[bytes - 1] = '\0';
+        if (bytes >= 2 && buffer[bytes - 2] == '\r') buffer[bytes - 2] = '\0';
+        return string(buffer);
+    }
+    return "";
+}
 
-bool khoiTaoWinsock() {
-    WSADATA wsa;
-    cout << "Initialising Winsock...Initialised.\n\n";
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-        cout << "Failed. Error Code : " << WSAGetLastError() << "\n";
+bool FTPClient::sendCommand(const string& cmd, string& response)
+{
+    string fullCmd = cmd + "\r\n";
+    int sent = sendStringRequest(fullCmd);
+    if (sent <= 0)
+    {
         return false;
     }
-    CreateDirectoryA(THU_MUC_TAI, NULL);
-    return true;
+    response = readResponse();
+    return !response.empty();
 }
 
-void donDepWinsock() {
-    WSACleanup();
-}
+bool FTPClient::login(const string& host, unsigned short port, const string& user, const string& pass)
+{
+    // Neu dang co phien truoc do, dong lai
+    quitSession();
 
+    this->serverHost = host;
+    this->serverPort = port;
 
-// ══════════════════════════════════════════
-// HAM TIEN ICH: GUI / NHAN QUA SOCKET
-// ══════════════════════════════════════════
-
-void guiLenh(SOCKET s, const string& lenh) {
-    string truyen = lenh + "\r\n";
-    send(s, truyen.c_str(), (int)truyen.size(), 0);
-}
-
-string nhanPhanHoi(SOCKET s) {
-    string ket = "";
-    char c;
-    while (true) {
-        int r = recv(s, &c, 1, 0);
-        if (r <= 0) break;
-        if (c == '\n') break;
-        if (c != '\r') ket += c;
+    cout << "[FTP Client] Dang ket noi den " << host << ":" << port << "..." << endl;
+    if (!open(host, port))
+    {
+        cout << "[-] Loi: Khong the ket noi den Server FTP!" << endl;
+        return false;
     }
-    return ket;
-}
 
-int laySoCong(const string& phanHoi) {
-    istringstream iss(phanHoi);
-    string ma, cong;
-    iss >> ma >> cong;
-    return stoi(cong);
-}
-
-SOCKET ketNoiData(int soCong) {
-    SOCKET ds = socket(AF_INET, SOCK_STREAM, 0);
-
-    sockaddr_in diaChiServer;
-    diaChiServer.sin_family      = AF_INET;
-    diaChiServer.sin_addr.s_addr = inet_addr(serverIP.c_str());
-    diaChiServer.sin_port        = htons((u_short)soCong);
-
-    if (connect(ds, (sockaddr*)&diaChiServer, sizeof(diaChiServer)) < 0) {
-        cout << "[CLIENT] Loi ket noi data connection!\n";
-        closesocket(ds);
-        return INVALID_SOCKET;
+    // Doc thong bao chao mung tu Server (ma 220)
+    string greeting = readResponse();
+    cout << "[Server] " << greeting << endl;
+    if (greeting.find("220") != 0)
+    {
+        cout << "[-] Server khong san sang tiep nhan." << endl;
+        close();
+        return false;
     }
-    return ds;
-}
 
-
-// ══════════════════════════════════════════
-// HUONG DAN LENH (HELP)
-// ══════════════════════════════════════════
-
-void troGiupClient() {
-    cout << "\n================= HUONG DAN LENH CLIENT ================\n";
-    cout << "  login <IP> <user> <pass> : Ket noi va dang nhap vao FTP Server\n";
-    cout << "                             Vi du: login 127.0.0.1 admin 1234\n";
-    cout << "                             (Hoac dung IP LAN, vd: login 192.168.1.168 admin 1234)\n\n";
-    cout << "  list <ten_thu_muc>       : Xem danh sach cac file co trong thu muc tren server\n";
-    cout << "                             (Co the dung lenh 'ls', vi du: list docs hoac ls docs)\n\n";
-    cout << "  get <duong_dan_file>     : Tai mot file don le tu server ve may\n";
-    cout << "                             Vi du: get docs/file1.txt (hoac get docs\\file1.txt)\n\n";
-    cout << "  mget <ten_thu_muc>       : Tai toan bo file trong thu muc tu server\n";
-    cout << "                             Vi du: mget docs\n";
-    cout << "                             (Hoac tai 1 file cu the, vd: mget docs/file1.txt)\n\n";
-    cout << "  help                     : Hien thi danh sach huong dan lenh nay\n\n";
-    cout << "  quit                     : Ngat ket noi va thoat chuong trinh\n";
-    cout << "========================================================\n\n";
-}
-
-
-// ══════════════════════════════════════════
-// LENH LOGIN
-// ══════════════════════════════════════════
-
-void dangNhap(const string& ip, const string& tenND, const string& matKhau) {
-    socketDieuKhien = socket(AF_INET, SOCK_STREAM, 0);
-    if (socketDieuKhien == INVALID_SOCKET) {
-        cout << "[CLIENT] Loi tao socket: " << WSAGetLastError() << "\n";
-        return;
+    // 1. Gui lenh USER
+    string resp;
+    if (!sendCommand("USER " + user, resp))
+    {
+        cout << "[-] Loi khi gui lenh USER!" << endl;
+        close();
+        return false;
     }
-    cout << "Socket created.\n";
+    cout << "[Server] " << resp << endl;
 
-    sockaddr_in serverAddr;
-    serverAddr.sin_family      = AF_INET;
-    serverAddr.sin_addr.s_addr = inet_addr(ip.c_str());
-    serverAddr.sin_port        = htons(CONG_FTP);
-
-    if (connect(socketDieuKhien, (sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-        cout << "[CLIENT] Khong the ket noi toi " << ip << ":" << CONG_FTP << "\n";
-        cout << "         (Hay chac chan FTPServer da chay va da go lenh 'start')\n";
-        closesocket(socketDieuKhien);
-        socketDieuKhien = INVALID_SOCKET;
-        return;
+    // 2. Gui lenh PASS
+    if (!sendCommand("PASS " + pass, resp))
+    {
+        cout << "[-] Loi khi gui lenh PASS!" << endl;
+        close();
+        return false;
     }
-    cout << "Connected.\n";
-    serverIP = ip;
+    cout << "[Server] " << resp << endl;
 
-    string phanHoi = nhanPhanHoi(socketDieuKhien);
-    cout << "[CLIENT] " << phanHoi << "\n";
-
-    guiLenh(socketDieuKhien, "USER " + tenND);
-    phanHoi = nhanPhanHoi(socketDieuKhien);
-    cout << "[CLIENT] " << phanHoi << "\n";
-
-    guiLenh(socketDieuKhien, "PASS " + matKhau);
-    phanHoi = nhanPhanHoi(socketDieuKhien);
-    cout << "[CLIENT] " << phanHoi << "\n";
-
-    if (phanHoi.size() >= 3 && phanHoi.substr(0, 3) == "230") {
-        cout << "[CLIENT] Dang nhap thanh cong!\n";
-        cout << "         (Ban co the go tiep: mget docs de tai thu muc)\n";
-    } else {
-        cout << "[CLIENT] Dang nhap that bai! Kiem tra lai tai khoan/mat khau.\n";
-        closesocket(socketDieuKhien);
-        socketDieuKhien = INVALID_SOCKET;
-        serverIP = "";
+    if (resp.find("230") == 0)
+    {
+        isAuthed = true;
+        currentUser = user;
+        cout << "[+] Dang nhap thanh cong voi tai khoan: " << currentUser << endl;
+        return true;
+    }
+    else
+    {
+        isAuthed = false;
+        currentUser = "";
+        cout << "[-] Dang nhap that bai! Vui long kiem tra lai tai khoan va mat khau." << endl;
+        close();
+        return false;
     }
 }
 
-
-// ══════════════════════════════════════════
-// MGET BUOC A: LAY DANH SACH FILE
-// ══════════════════════════════════════════
-
-vector<string> layDanhSachFile(const string& tenThuMuc) {
-    vector<string> dsFile;
-
-    guiLenh(socketDieuKhien, "LIST " + tenThuMuc);
-    string phanHoi = nhanPhanHoi(socketDieuKhien);
-
-    if (phanHoi.size() >= 3 && phanHoi.substr(0, 3) == "550") {
-        cout << "[CLIENT] Loi: Thu muc '" << tenThuMuc << "' khong ton tai tren server!\n";
-        cout << "         (Goi y: Thu muc mau tren server la: docs)\n";
-        return dsFile;
+bool FTPClient::openDataConnection(TcpSocket& dataSocket)
+{
+    // Gui lenh PASV de yeu cau Server mo kenh du lieu thu dong
+    string resp;
+    if (!sendCommand("PASV", resp))
+    {
+        return false;
     }
 
-    int soCong = laySoCong(phanHoi);
+    // Parse ma phan hoi: 227 Entering Passive Mode (h1,h2,h3,h4,p1,p2)
+    size_t startPos = resp.find('(');
+    size_t endPos = resp.find(')');
+    if (startPos == string::npos || endPos == string::npos || endPos <= startPos)
+    {
+        cerr << "[-] Loi phan tich phan hoi PASV tu Server: " << resp << endl;
+        return false;
+    }
 
-    SOCKET dataSocket = ketNoiData(soCong);
-    if (dataSocket == INVALID_SOCKET) return dsFile;
+    string numbersStr = resp.substr(startPos + 1, endPos - startPos - 1);
+    stringstream ss(numbersStr);
+    string token;
+    vector<int> nums;
+    while (getline(ss, token, ','))
+    {
+        nums.push_back(atoi(token.c_str()));
+    }
 
-    string tenFile = "";
-    char c;
-    while (true) {
-        int r = recv(dataSocket, &c, 1, 0);
-        if (r <= 0) {
-            if (!tenFile.empty()) dsFile.push_back(tenFile);
-            break;
+    if (nums.size() < 6)
+    {
+        cerr << "[-] Thong tin IP/Port trong ban tin PASV khong hop le!" << endl;
+        return false;
+    }
+
+    ostringstream ipOss;
+    ipOss << nums[0] << "." << nums[1] << "." << nums[2] << "." << nums[3];
+    string dataIP = ipOss.str();
+    unsigned short dataPort = (unsigned short)(nums[4] * 256 + nums[5]);
+
+    // Ket noi den kenh du lieu cua Server
+    try
+    {
+        dataSocket.connect(dataIP, dataPort);
+        return true;
+    }
+    catch (SocketException& e)
+    {
+        cerr << "[-] Khong the ket noi kenh du lieu Data Socket: " << e.what() << endl;
+        return false;
+    }
+}
+
+vector<string> FTPClient::listFiles(const string& folder)
+{
+    vector<string> files;
+    if (!isAuthed)
+    {
+        cout << "[-] Ban chua dang nhap! Vui long dung lenh login truoc." << endl;
+        return files;
+    }
+
+    TcpSocket dataSocket;
+    if (!openDataConnection(dataSocket))
+    {
+        cout << "[-] Khong the mo kenh du lieu PASV!" << endl;
+        return files;
+    }
+
+    // Gui lenh LIST
+    string listCmd = "LIST";
+    if (!folder.empty() && folder != ".")
+    {
+        listCmd += " " + folder;
+    }
+
+    string resp;
+    if (!sendCommand(listCmd, resp))
+    {
+        dataSocket.close();
+        return files;
+    }
+    cout << "[Server] " << resp << endl;
+
+    // Doc toan bo du lieu danh sach tu dataSocket
+    string rawData;
+    char buffer[1024];
+    int bytes = 0;
+    while ((bytes = dataSocket.recv(buffer, sizeof(buffer) - 1)) > 0)
+    {
+        buffer[bytes] = '\0';
+        rawData += buffer;
+    }
+    dataSocket.close();
+
+    // Nhan thong bao ket thuc tu Server (226)
+    string finishResp = readResponse();
+    cout << "[Server] " << finishResp << endl;
+
+    // Tach cac dong thanh danh sach file
+    stringstream ss(rawData);
+    string line;
+    while (getline(ss, line))
+    {
+        if (!line.empty() && line[line.size() - 1] == '\r')
+        {
+            line.erase(line.size() - 1);
         }
-        if (c == '\n') {
-            if (!tenFile.empty()) {
-                dsFile.push_back(tenFile);
-                tenFile = "";
-            }
-        } else if (c != '\r') {
-            tenFile += c;
+        if (!line.empty())
+        {
+            files.push_back(line);
         }
     }
-    closesocket(dataSocket);
 
-    nhanPhanHoi(socketDieuKhien);
-    return dsFile;
+    return files;
 }
 
-
-// ══════════════════════════════════════════
-// MGET BUOC B: TAI MOT FILE
-// ══════════════════════════════════════════
-
-void taiMotFile(const string& tenThuMuc, const string& tenFile, int soThuTu, int tongSo) {
-    guiLenh(socketDieuKhien, "RETR " + tenThuMuc + "/" + tenFile);
-    string phanHoi = nhanPhanHoi(socketDieuKhien);
-
-    if (phanHoi.size() >= 3 && phanHoi.substr(0, 3) == "550") {
-        cout << "[CLIENT] Loi: Khong the tai file '" << tenFile << "'\n";
-        return;
+bool FTPClient::downloadFile(const string& remotePath)
+{
+    if (!isAuthed)
+    {
+        cout << "[-] Ban chua dang nhap! Vui long dung lenh login truoc." << endl;
+        return false;
     }
 
-    int soCong = laySoCong(phanHoi);
-
-    SOCKET dataSocket = ketNoiData(soCong);
-    if (dataSocket == INVALID_SOCKET) return;
-
-    string duongDanLuu = string(THU_MUC_TAI) + "\\" + tenFile;
-    ofstream file(duongDanLuu, ios::binary);
-    if (!file.is_open()) {
-        cout << "[CLIENT] Loi: Khong the tao file '" << duongDanLuu << "'\n";
-        closesocket(dataSocket);
-        return;
+    TcpSocket dataSocket;
+    if (!openDataConnection(dataSocket))
+    {
+        cout << "[-] Khong the mo kenh du lieu PASV!" << endl;
+        return false;
     }
 
+    // Gui lenh RETR de tai file
+    string resp;
+    if (!sendCommand("RETR " + remotePath, resp))
+    {
+        dataSocket.close();
+        return false;
+    }
+    cout << "[Server] " << resp << endl;
+
+    if (resp.find("150") != 0)
+    {
+        dataSocket.close();
+        return false;
+    }
+
+    // Lay ten file tu remotePath (vi du "docs/tailieu.txt" -> "tailieu.txt")
+    string localFileName = remotePath;
+    size_t lastSlash = localFileName.find_last_of("/\\");
+    if (lastSlash != string::npos)
+    {
+        localFileName = localFileName.substr(lastSlash + 1);
+    }
+
+    string localFilePath = downloadDir + "/" + localFileName;
+    ofstream outFile(localFilePath.c_str(), ios::binary);
+    if (!outFile.is_open())
+    {
+        cout << "[-] Khong the tao file tai: " << localFilePath << endl;
+        dataSocket.close();
+        return false;
+    }
+
+    // Doc du lieu tu dataSocket va ghi vao file
     char buffer[4096];
-    while (true) {
-        int soByteNhan = recv(dataSocket, buffer, sizeof(buffer), 0);
-        if (soByteNhan <= 0) break;
-        file.write(buffer, soByteNhan);
+    int bytesRead = 0;
+    long long totalBytes = 0;
+    while ((bytesRead = dataSocket.recv(buffer, sizeof(buffer))) > 0)
+    {
+        outFile.write(buffer, bytesRead);
+        totalBytes += bytesRead;
     }
-    file.close();
+    outFile.close();
+    dataSocket.close();
 
-    closesocket(dataSocket);
-    nhanPhanHoi(socketDieuKhien);
+    string finishResp = readResponse();
+    cout << "[Server] " << finishResp << endl;
 
-    cout << "[CLIENT] Da tai " << soThuTu << "/" << tongSo << " file: " << tenFile << "\n";
+    if (finishResp.find("226") == 0)
+    {
+        cout << "[+] Da luu tep: " << localFilePath << " (" << totalBytes << " bytes)" << endl;
+        return true;
+    }
+    else
+    {
+        cout << "[-] Tai file that bai hoac bi gian doan!" << endl;
+        return false;
+    }
 }
 
+void FTPClient::bulkDownload(const string& folder)
+{
+    cout << "\n=======================================================" << endl;
+    cout << "  THUC HIEN BULK DOWNLOAD (TAI HANG LOAT TOAN BO THU MUC)" << endl;
+    cout << "  Thu muc muc tieu tren Server: '" << (folder.empty() ? "goc" : folder) << "'" << endl;
+    cout << "=======================================================" << endl;
 
-// ══════════════════════════════════════════
-// LENH LIST / LS: XEM DANH SACH FILE
-// ══════════════════════════════════════════
-
-void xemDanhSachFile(const string& tenThuMuc) {
-    if (socketDieuKhien == INVALID_SOCKET) {
-        cout << "[CLIENT] Chua dang nhap! Go 'help' hoac dung lenh: login <IP> admin 1234\n";
+    // 1. Lay danh sach file trong thu muc tu Server
+    vector<string> items = listFiles(folder);
+    if (items.empty())
+    {
+        cout << "[*] Khong co tep tin nao trong thu muc nay de tai ve." << endl;
         return;
     }
 
-    cout << "[CLIENT] Dang xem danh sach file trong thu muc '" << tenThuMuc << "'...\n";
-    vector<string> dsFile = layDanhSachFile(tenThuMuc);
+    // Loc ra cac file thuc su (bo qua thu muc con ket thuc bang '/')
+    vector<string> filesToDownload;
+    for (size_t i = 0; i < items.size(); ++i)
+    {
+        string item = items[i];
+        if (!item.empty() && item[item.size() - 1] != '/')
+        {
+            filesToDownload.push_back(item);
+        }
+    }
 
-    if (dsFile.empty()) {
-        cout << "[CLIENT] Thu muc '" << tenThuMuc << "' trong hoac khong ton tai tren server.\n";
+    if (filesToDownload.empty())
+    {
+        cout << "[*] Chi co thu muc con, khong co tap tin truc tiep de tai ve." << endl;
         return;
     }
 
-    cout << "\n=== DANH SACH FILE TRONG THU MUC '" << tenThuMuc << "' ===\n";
-    for (size_t i = 0; i < dsFile.size(); ++i) {
-        cout << "  " << (i + 1) << ". " << dsFile[i] << "\n";
+    int totalFiles = (int)filesToDownload.size();
+    cout << "[*] Phat hien " << totalFiles << " tap tin can tai ve." << endl;
+
+    int successCount = 0;
+    for (int i = 0; i < totalFiles; ++i)
+    {
+        string fileName = filesToDownload[i];
+        string remotePath = folder.empty() ? fileName : (folder + "/" + fileName);
+
+        cout << "\n-------------------------------------------------------" << endl;
+        cout << "[" << (i + 1) << "/" << totalFiles << "] Dang tai: " << fileName << "..." << endl;
+
+        if (downloadFile(remotePath))
+        {
+            successCount++;
+        }
     }
-    cout << "Tong cong: " << dsFile.size() << " file.\n";
-    cout << "================================================\n\n";
+
+    cout << "\n=======================================================" << endl;
+    cout << "  HOAN TAT BULK DOWNLOAD!" << endl;
+    cout << "  Ket qua: " << successCount << "/" << totalFiles << " file tai ve thanh cong." << endl;
+    cout << "  Cac file duoc luu tai thu muc: ./" << downloadDir << "/" << endl;
+    cout << "=======================================================" << endl;
 }
 
-
-// ══════════════════════════════════════════
-// LENH GET: TAI MOT FILE DON LE
-// ══════════════════════════════════════════
-
-void taiFileDonLe(const string& duongDanFile) {
-    if (socketDieuKhien == INVALID_SOCKET) {
-        cout << "[CLIENT] Chua dang nhap! Go 'help' hoac dung lenh: login <IP> admin 1234\n";
-        return;
+void FTPClient::quitSession()
+{
+    if (isConnected())
+    {
+        try
+        {
+            string resp;
+            sendCommand("QUIT", resp);
+        }
+        catch (...) {}
+        close();
     }
-
-    // Chuan hoa duong dan (chuyen dau '\' thanh '/')
-    string duongDanChuan = duongDanFile;
-    for (char& c : duongDanChuan) {
-        if (c == '\\') c = '/';
-    }
-
-    // Tach lay ten file o cuoi de luu vao thu muc client_downloads
-    size_t viTriCuoi = duongDanChuan.find_last_of('/');
-    string tenFileLuu = (viTriCuoi == string::npos) ? duongDanChuan : duongDanChuan.substr(viTriCuoi + 1);
-
-    cout << "[CLIENT] Dang yeu cau tai file: '" << duongDanChuan << "'...\n";
-
-    guiLenh(socketDieuKhien, "RETR " + duongDanChuan);
-    string phanHoi = nhanPhanHoi(socketDieuKhien);
-
-    if (phanHoi.size() >= 3 && phanHoi.substr(0, 3) == "550") {
-        cout << "[CLIENT] Loi: File '" << duongDanFile << "' khong ton tai tren server!\n";
-        return;
-    }
-
-    int soCong = laySoCong(phanHoi);
-    SOCKET dataSocket = ketNoiData(soCong);
-    if (dataSocket == INVALID_SOCKET) return;
-
-    string duongDanLuu = string(THU_MUC_TAI) + "\\" + tenFileLuu;
-    ofstream file(duongDanLuu, ios::binary);
-    if (!file.is_open()) {
-        cout << "[CLIENT] Loi: Khong the tao file '" << duongDanLuu << "'\n";
-        closesocket(dataSocket);
-        return;
-    }
-
-    char buffer[4096];
-    while (true) {
-        int soByteNhan = recv(dataSocket, buffer, sizeof(buffer), 0);
-        if (soByteNhan <= 0) break;
-        file.write(buffer, soByteNhan);
-    }
-    file.close();
-
-    closesocket(dataSocket);
-    nhanPhanHoi(socketDieuKhien);
-
-    cout << "[CLIENT] Da tai thanh cong file: '" << tenFileLuu << "' ve thu muc '" << THU_MUC_TAI << "'!\n";
-}
-
-
-// ══════════════════════════════════════════
-// LENH MGET TONG HOP
-// ══════════════════════════════════════════
-
-void taiToanBoThuMuc(const string& tenThuMuc) {
-    if (socketDieuKhien == INVALID_SOCKET) {
-        cout << "[CLIENT] Chua dang nhap! Go 'help' hoac dung lenh: login <IP> admin 1234\n";
-        return;
-    }
-
-    // Neu nguoi dung truyen vao 1 file cu the (co phan mo rong .txt, .pdf, v.v...)
-    size_t vitriCham = tenThuMuc.find_last_of('.');
-    size_t vitriXiet = tenThuMuc.find_last_of("/\\");
-    if (vitriCham != string::npos && (vitriXiet == string::npos || vitriCham > vitriXiet)) {
-        taiFileDonLe(tenThuMuc);
-        return;
-    }
-
-    cout << "[CLIENT] Dang lay danh sach file trong thu muc '" << tenThuMuc << "'...\n";
-    vector<string> dsFile = layDanhSachFile(tenThuMuc);
-
-    if (dsFile.empty()) {
-        cout << "[CLIENT] Thu muc '" << tenThuMuc << "' trong hoac khong ton tai.\n";
-        return;
-    }
-
-    int tongSo = (int)dsFile.size();
-    cout << "[CLIENT] Tim thay " << tongSo << " file trong thu muc '" << tenThuMuc << "'\n";
-
-    for (int i = 0; i < tongSo; i++) {
-        taiMotFile(tenThuMuc, dsFile[i], i + 1, tongSo);
-    }
-
-    cout << "[CLIENT] Hoan thanh! Da tai " << tongSo << "/" << tongSo
-         << " file ve thu muc '" << THU_MUC_TAI << "'\n";
-}
-
-
-// ══════════════════════════════════════════
-// LENH QUIT
-// ══════════════════════════════════════════
-
-void ketThucPhien() {
-    if (socketDieuKhien == INVALID_SOCKET) {
-        cout << "[CLIENT] Chua ket noi toi server nao.\n";
-        return;
-    }
-
-    guiLenh(socketDieuKhien, "QUIT");
-    string phanHoi = nhanPhanHoi(socketDieuKhien);
-    cout << "[CLIENT] " << phanHoi << "\n";
-
-    closesocket(socketDieuKhien);
-    socketDieuKhien = INVALID_SOCKET;
-    serverIP = "";
-    cout << "[CLIENT] Da ngat ket noi.\n";
+    isAuthed = false;
+    currentUser = "";
 }

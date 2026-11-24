@@ -1,73 +1,38 @@
-#include "FTPServer.h"
+#include "socket.h"
+#include "ftpservercli.h"
 #include <iostream>
-#include <string>
-#include <sstream>
-#include <vector>
 
-using namespace std;
+// ============================================================================
+// CHUONG TRINH CHINH FTP SERVER (ServerMain.cpp)
+// ============================================================================
+int main()
+{
+    try
+    {
+        // 1. Khoi tao thu vien Winsock (goi ham tinh cua lop Socket theo chuan cua Thay)
+        Socket::startUp();
 
-int main() {
-    // Khoi tao thu vien Winsock
-    if (!khoiTaoWinsock()) {
+        // 2. Khoi tao giao dien dong lenh quan tri FTP Server CLI
+        FTPServerCLI cli;
+
+        // 3. Bat dau vong lap doc va thuc thi lenh quan tri
+        cli.run();
+
+        // 4. Don dep thu vien Winsock khi ket thuc chuong trinh
+        Socket::cleanUp();
+    }
+    catch (SocketException& e)
+    {
+        std::cerr << "[ServerMain] Ngoai le Socket: " << e.what() << std::endl;
+        Socket::cleanUp();
+        return 1;
+    }
+    catch (std::exception& e)
+    {
+        std::cerr << "[ServerMain] Ngoai le he thong: " << e.what() << std::endl;
+        Socket::cleanUp();
         return 1;
     }
 
-    cout << "========================================\n";
-    cout << "      FTP SERVER - DE TAI 13\n";
-    cout << "========================================\n";
-    cout << "(Go 'help' de xem danh sach lenh)\n";
-    cout << "----------------------------------------\n";
-
-    string dong;
-    while (true) {
-        cout << "server> ";
-        getline(cin, dong);
-
-        if (dong.empty()) continue;
-
-        istringstream iss(dong);
-        vector<string> phan;
-        string tu;
-        while (iss >> tu) phan.push_back(tu);
-
-        if (phan.empty()) continue;
-        string tenLenh = phan[0];
-
-        if (tenLenh == "start") {
-            khoiDongServer();
-
-        } else if (tenLenh == "stop") {
-            tatServer();
-
-        } else if (tenLenh == "ip") {
-            hienThiIPServer();
-
-        } else if (tenLenh == "adduser") {
-            if (phan.size() != 3) {
-                cout << "Cach dung: adduser <username> <password>\n";
-                cout << "Vi du   : adduser sinhvien 123456\n";
-                continue;
-            }
-            themTaiKhoan(phan[1], phan[2]);
-            cout << "[SERVER] Da tao/cap nhat tai khoan '" << phan[1] << "' thanh cong!\n";
-
-        } else if (tenLenh == "users") {
-            hienThiDanhSachTaiKhoan();
-
-        } else if (tenLenh == "help") {
-            troGiupServer();
-
-        } else if (tenLenh == "exit") {
-            tatServer();
-            cout << "Chuong trinh ket thuc.\n";
-            break;
-
-        } else {
-            cout << "Lenh khong hop le: '" << tenLenh << "'. Go 'help' de xem huong dan.\n";
-        }
-    }
-
-    donDepWinsock();
     return 0;
 }
-
