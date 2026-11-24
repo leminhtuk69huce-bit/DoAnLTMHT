@@ -1,0 +1,197 @@
+@startuml
+skinparam defaultFontName "Times New Roman"
+skinparam classFontSize 13
+skinparam classAttributeFontSize 12
+skinparam packageFontSize 14
+skinparam roundCorner 5
+skinparam shadowing false
+skinparam classFontStyle bold
+
+skinparam package {
+    BorderColor #2B579A
+    BorderThickness 1.5
+    FontSize 14
+    FontStyle bold
+    BackgroundColor #FAFAFA
+}
+
+skinparam class {
+    BackgroundColor #F8F9FA
+    ArrowColor #2C3E50
+    BorderColor #2C3E50
+    BorderThickness 1.5
+    HeaderBackgroundColor #2B579A
+    FontColor #FFFFFF
+    AttributeFontColor #2C3E50
+    AttributeFontSize 12
+}
+
+title BIỂU ĐỒ LỚP HỆ THỐNG MẠNG CLIENT - SERVER (THEO QUY CHUẨN GIẢNG VIÊN)
+
+' ========================================================
+' PHÂN HỆ CLIENT
+' ========================================================
+package "Phân hệ Client (Client)" {
+    class Socket as "Socket" {
+        # m_socket : SOCKET
+        # m_port : int
+        # m_ip : string
+        --
+        + Socket()
+        + virtual ~Socket()
+        + close() : void
+    }
+
+    class TCPSocket as "TCPSocket" {
+        - isConnected : bool
+        --
+        + TCPSocket()
+        + TCPSocket(s : SOCKET)
+        + connectTo(ip : string, port : int) : bool
+        + sendData(buf : const char*, len : int) : int
+        + recvData(buf : char*, maxLen : int) : int
+    }
+
+    class TCPClient as "TCPClient" {
+        # clientSocket : TCPSocket*
+        # serverIP : string
+        # serverPort : int
+        --
+        + TCPClient()
+        + virtual ~TCPClient()
+        + connectServer(ip : string, port : int) : bool
+        + disconnect() : void
+    }
+
+    class ChargeClient as "FTPClient\n(ChargeClient)" {
+        - downloadDir : string = "client_downloads"
+        --
+        + login(ip : string, user : string, pass : string) : bool
+        + listFiles(folder : string) : vector<string>
+        + downloadFile(path : string) : bool
+        + bulkDownload(folder : string) : void
+        + quit() : void
+    }
+
+    class CLI as "CLI" {
+        # isRunning : bool
+        --
+        + CLI()
+        + virtual ~CLI()
+        + virtual run() : void
+        + virtual printHelp() : void
+    }
+
+    class ChargeClientCLI as "FTPClientCLI\n(ChargeClientCLI)" {
+        - client : FTPClient*
+        --
+        + FTPClientCLI(client : FTPClient*)
+        + run() : void
+        + processCommand(cmd : string) : void
+        + printHelp() : void
+    }
+
+    Socket <|-- TCPSocket : kế thừa
+    TCPClient --> TCPSocket : sử dụng
+    TCPClient <|-- ChargeClient : kế thừa
+    CLI <|-- ChargeClientCLI : kế thừa
+    ChargeClientCLI --> ChargeClient : điều khiển
+}
+
+' ========================================================
+' PHÂN HỆ SERVER
+' ========================================================
+package "Phân hệ Server (Server)" {
+    class ServerSocketBase as "Socket" {
+        # m_socket : SOCKET
+        # m_port : int
+        # m_ip : string
+        --
+        + Socket()
+        + virtual ~Socket()
+        + close() : void
+    }
+
+    class ServerTCPSocket as "TCPSocket" {
+        - isConnected : bool
+        --
+        + TCPSocket(s : SOCKET)
+        + sendData(buf : const char*, len : int) : int
+        + recvData(buf : char*, maxLen : int) : int
+    }
+
+    class TCPServerSocket as "TCPServerSocket" {
+        - isListening : bool
+        --
+        + TCPServerSocket()
+        + open(port : int) : bool
+        + acceptClient() : TCPSocket*
+    }
+
+    class TCPServer as "TCPServer" {
+        # serverSocket : TCPServerSocket*
+        # isRunning : bool
+        # port : int
+        --
+        + TCPServer(port : int)
+        + virtual ~TCPServer()
+        + virtual start() : bool
+        + virtual stop() : void
+    }
+
+    class ChargeServer as "FTPServer\n(ChargeServer)" {
+        - config : ServerConfig
+        - sessions : vector<Session*>
+        --
+        + handleClient(clientSock : TCPSocket*) : void
+        + handleList(clientSock : TCPSocket*, folder : string) : void
+        + handleRetr(clientSock : TCPSocket*, path : string) : void
+        + addAccount(user : string, pass : string) : bool
+    }
+
+    class ServerCLI as "CLI" {
+        # isRunning : bool
+        --
+        + CLI()
+        + virtual ~CLI()
+        + virtual run() : void
+        + virtual printHelp() : void
+    }
+
+    class ChargeServerCLI as "FTPServerCLI\n(ChargeServerCLI)" {
+        - server : FTPServer*
+        --
+        + FTPServerCLI(server : FTPServer*)
+        + run() : void
+        + processCommand(cmd : string) : void
+        + printHelp() : void
+    }
+
+    class Session as "Session" {
+        - clientSocket : TCPSocket*
+        - username : string
+        - isAuthed : bool
+        --
+        + Session(sock : TCPSocket*)
+        + setAuthed(val : bool) : void
+        + getSocket() : TCPSocket*
+    }
+
+    class ServerConfig as "ServerConfig" {
+        + port : int = 21
+        + rootDir : string = "server_files"
+        + maxClients : int = 10
+    }
+
+    ServerSocketBase <|-- ServerTCPSocket : kế thừa
+    ServerSocketBase <|-- TCPServerSocket : kế thừa
+    TCPServer <|-- ChargeServer : kế thừa
+    ChargeServer --> TCPServerSocket : lắng nghe cổng 21
+    ChargeServer --> ServerTCPSocket : giao tiếp dữ liệu
+    ChargeServer --> Session : quản lý phiên
+    ChargeServer --> ServerConfig : cấu hình
+    ServerCLI <|-- ChargeServerCLI : kế thừa
+    ChargeServerCLI --> ChargeServer : điều khiển
+}
+
+@enduml
