@@ -27,6 +27,7 @@ private:
     void doList(string cmd_argv[], int cmd_argc);
     void doGet(string cmd_argv[], int cmd_argc);
     void doMGet(string cmd_argv[], int cmd_argc);
+    void doIP(string cmd_argv[], int cmd_argc);
     void doHelp(string cmd_argv[], int cmd_argc);
 };
 

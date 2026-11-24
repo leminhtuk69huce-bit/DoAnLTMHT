@@ -85,9 +85,9 @@ void FTPSession::doPass(string cmd_argv[], int cmd_argc)
     }
     else
     {
+        cout << "[FTP Server] Dang nhap that bai voi tai khoan '" << pendingUser << "'." << endl;
         pendingUser = "";
         sendResp("530 Not logged in, invalid credentials.\r\n");
-        cout << "[FTP Server] Dang nhap that bai voi tai khoan '" << pendingUser << "'." << endl;
     }
 }
 

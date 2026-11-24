@@ -1,5 +1,34 @@
 #include "ftpclientcli.h"
 #include <iostream>
+#include <vector>
+#include <winsock2.h>
+
+// Ham tien ich lay danh sach dia chi IP cua may tinh
+static vector<string> getClientIPList()
+{
+    vector<string> ips;
+    try
+    {
+        string host = Socket::getHostname();
+        hostent* pHost = gethostbyname(host.c_str());
+        if (pHost != NULL)
+        {
+            for (int i = 0; pHost->h_addr_list[i] != NULL; ++i)
+            {
+                in_addr addr;
+                addr.s_addr = *((unsigned long*)pHost->h_addr_list[i]);
+                ips.push_back(inet_ntoa(addr));
+            }
+        }
+    }
+    catch (...) {}
+
+    if (ips.empty())
+    {
+        ips.push_back("127.0.0.1");
+    }
+    return ips;
+}
 
 FTPClientCLI::FTPClientCLI() : CmdLineInterface("ftp_client> ")
 {
@@ -25,6 +54,7 @@ void FTPClientCLI::initCmd()
     addCmd("list",  CLI_CAST(&FTPClientCLI::doList));
     addCmd("get",   CLI_CAST(&FTPClientCLI::doGet));
     addCmd("mget",  CLI_CAST(&FTPClientCLI::doMGet));
+    addCmd("ip",    CLI_CAST(&FTPClientCLI::doIP));
     addCmd("help",  CLI_CAST(&FTPClientCLI::doHelp));
 }
 
@@ -98,6 +128,17 @@ void FTPClientCLI::doMGet(string cmd_argv[], int cmd_argc)
     client.bulkDownload(folder);
 }
 
+void FTPClientCLI::doIP(string cmd_argv[], int cmd_argc)
+{
+    vector<string> ips = getClientIPList();
+    cout << "=== DIA CHI IP CUA MAY CLIENT ===" << endl;
+    for (size_t i = 0; i < ips.size(); ++i)
+    {
+        cout << "  - " << ips[i] << endl;
+    }
+    cout << "=================================" << endl;
+}
+
 void FTPClientCLI::doHelp(string cmd_argv[], int cmd_argc)
 {
     cout << "=== HUONG DAN SU DUNG FTP CLIENT v5 ===" << endl;
@@ -105,6 +146,7 @@ void FTPClientCLI::doHelp(string cmd_argv[], int cmd_argc)
     cout << "  list [folder]                   : Xem danh sach tep tin/thu muc tren Server" << endl;
     cout << "  get <file_path>                 : Tai 1 tep tin don le tu Server ve may" << endl;
     cout << "  mget [folder]                   : [DE TAI 13] Tai toan bo mot thu muc (Bulk Download)" << endl;
+    cout << "  ip                              : Xem dia chi IP cua may nay" << endl;
     cout << "  help                            : Hien thi huong dan nay" << endl;
     cout << "  quit                            : Thoat chuong trinh Client" << endl;
     cout << "========================================" << endl;
