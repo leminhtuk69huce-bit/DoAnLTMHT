@@ -12,16 +12,17 @@ skinparam package {
     BorderThickness 1.5
     FontSize 14
     FontStyle bold
-    BackgroundColor #FAFAFA
+    BackgroundColor #FAFCFE
+    FontColor #1B365D
 }
 
 skinparam class {
-    BackgroundColor #F8F9FA
+    BackgroundColor #FFFFFF
     ArrowColor #2C3E50
-    BorderColor #2C3E50
+    BorderColor #2B579A
     BorderThickness 1.5
-    HeaderBackgroundColor #2B579A
-    FontColor #FFFFFF
+    HeaderBackgroundColor #E3F2FD
+    FontColor #0D47A1
     AttributeFontColor #2C3E50
     AttributeFontSize 12
 }
